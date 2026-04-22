@@ -1,0 +1,33 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Title: Sample Program
+;; Author: Osami Yamamoto
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+	READ 1  ; input the data
+	LOAD 1
+
+	JGTZ pos
+	WRITE =0
+	JUMP endif
+pos:	LOAD 1
+	STORE 2
+	LOAD 1	
+	SUB =1
+	STORE 3
+while:
+	LOAD 3
+	JGTZ continue
+	JUMP endwhile
+continue:
+	LOAD 2
+	MULT 1
+	STORE 2
+	LOAD 3
+	SUB =1
+	STORE 3
+	JUMP while
+endwhile:
+	WRITE 2
+endif:
+	HALT

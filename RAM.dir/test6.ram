@@ -1,0 +1,10 @@
+
+	LOAD =3
+	STORE 3
+	SJ 0,=2,L1
+L1:	
+	WRITE 0
+	SJ 0, 0, L2
+L2:	SJ 0, =7, L3
+L3:	WRITE 0
+	HALT

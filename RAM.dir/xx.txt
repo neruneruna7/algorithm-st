@@ -1,0 +1,11 @@
+
+
+foo <- function(i) {
+  if (i == 0) {
+    return(0)
+  } else {
+    return(foo(i - 1) * 10 + i)
+  }
+}
+
+print(foo(5))

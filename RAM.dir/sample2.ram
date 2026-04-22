@@ -1,0 +1,17 @@
+
+start:
+	LOAD =0
+	STORE 1
+loop:
+	LOAD 1
+	SUB =5
+	JZERO skip
+	LOAD 1
+	WRITE 0
+	LOAD 1
+	ADD =1
+	STORE 1
+	JUMP loop
+skip:
+	HALT
+

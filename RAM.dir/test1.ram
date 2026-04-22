@@ -1,0 +1,10 @@
+
+start:
+	LOAD =1
+	STORE 3
+	LOAD =10
+loop:
+	SUB 3
+	WRITE 0
+	JGTZ loop
+	HALT

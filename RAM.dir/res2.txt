@@ -1,0 +1,38 @@
+================================================
+| Random Access Machine Emulator
+| Osami Yamamoto (osami@ccmfs.meijo-u.ac.jp)
+| $Date: 2023/04/25 09:58:01 $, $Revision: 208bcd7fe429 $
+================================================
+   0:;;=========================================================
+   1:;; Title: Computing the sum of a linear sequence
+   2:;; Author: Osami Yamamoto (osami@meijo-u.ac.jp)
+   3:;; Date: Fri May  6 18:58:55 JST 2011
+   4:;;=========================================================
+   5:
+   6:	LOAD =20
+   7:	STORE 3
+   8:	LOAD =0
+   9:	STORE 5
+  10:	LOAD =1
+  11:	STORE 4
+  12:LOOP:
+  13:	SJ 1, 1, L1
+  14:L1:	SJ 1, 4, L2
+  15:L2:	SJ 5, 1, L3
+  16:L3:	SJ 1, 1, L4
+  17:L4:	SJ 1, 4, L5
+  18:L5:	SJ 2, 2, L6
+  19:L6:	SJ 2, 1, L7
+  20:L7:	SJ 2, 3, SKIP
+  21:	;; WRITE 5
+  22:	SJ 1, 1, L8
+  23:L8:	SJ 1, =1, L9
+  24:L9:	SJ 4, 1, L10
+  25:L10:	SJ 1, 1, LOOP
+  26:SKIP:
+  27:	WRITE 5
+  28:	HALT
+  29:
+  30:	
+WRITE: 210
+number of steps = 244

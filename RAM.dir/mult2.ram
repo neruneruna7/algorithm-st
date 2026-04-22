@@ -1,0 +1,55 @@
+
+	LOAD =343
+	STORE 1
+	LOAD =235
+
+
+	SJ 7, 7, M1
+M1:	SJ 7, 0, M2
+M2:	SJ 8, 8, M3
+M3:	SJ 8, 1, M4
+M4:	SJ 0, 0, M5
+M5:	SJ 0, 8, M6
+M6:
+
+
+	SJ 0, =0, skip0
+	SJ 1, 1, L1
+L1:	SJ 1, 0, L2
+L2:	SJ 0, =1, label_a
+	SJ 1, =1, skip
+	SJ 2, 2, L2
+
+skip:
+	SJ 2, 2, N5
+N5:	SJ 2, 7, N6
+N6:	SJ 0, 0, N7
+N7:	SJ 0, 2, N8
+N8:	SJ 2, 2, N9
+N9:	SJ 2, 8, N10
+N10:	SJ 1, 1, N11
+N11:	SJ 1, 2, N12
+N12:	SJ 4, 4, start
+	
+
+label_a:
+	SJ 1, 1, N2
+N2:	SJ 1, 8, N3
+N3:	SJ 0, 0, N4
+N4:	SJ 0, 7, start
+
+
+start:
+	SJ 2, 2, LL1
+LL1:	SJ 2, 0, LL2
+LL2:	SJ 3, 3, LL3
+LL3:	SJ 3, 2, LL4
+LL4:	SJ 1, =1, skip1
+	SJ 4, 4, LL3
+
+skip0:
+	SJ 3, 3, skip1
+skip1:
+
+	WRITE 3
+	HALT
