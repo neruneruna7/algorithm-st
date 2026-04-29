@@ -32,12 +32,12 @@ pub enum Opcode {
     Sj,    // オペランドX,Y,Z  X - Y をXに代入して，Xが0であればラベルZへJUMPする
 }
 
-#[derive(Debug, Clone)]
-pub enum Oprand {
-    Direct(usize),   // 直接アドレッシング
-    Indirect(usize), // 間接アドレッシング
-    Imediate(i32),   // 即値
-}
+// #[derive(Debug, Clone)]
+// pub enum Oprand {
+//     Direct(usize),   // 直接アドレッシング
+//     Indirect(usize), // 間接アドレッシング
+//     Imediate(i32),   // 即値
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
@@ -283,10 +283,12 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, LexError> {
     Lexer::new(input).tokenize()
 }
 
+// ラベル名の開始文字として有効な文字か
 fn is_label_start(ch: char) -> bool {
     ch.is_ascii_alphabetic() || ch == '_'
 }
 
+// ラベル名の続きの文字として有効な文字か
 fn is_label_continue(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
