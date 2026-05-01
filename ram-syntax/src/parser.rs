@@ -323,6 +323,7 @@ fn join_span(start: &Span, end: &Span) -> Span {
 mod tests {
     use super::*;
 
+    // ラベル定義、通常命令、ジャンプ命令、停止命令の基本形を確認する。
     #[test]
     fn parses_label_and_instruction_lines() {
         let program = parse("start:\nLOAD =10\nJUMP start\nHALT\n").unwrap();
@@ -374,6 +375,7 @@ mod tests {
         );
     }
 
+    // 空行は意味を持たないため、AST には残さない。
     #[test]
     fn skips_empty_lines() {
         let program = parse("\n\nLOAD 1\n\n").unwrap();
@@ -394,6 +396,7 @@ mod tests {
         );
     }
 
+    // SJ は `operand, operand, label` の固定形式として解析する。
     #[test]
     fn parses_sj_instruction() {
         let program = parse("SJ 0,=2,L1\n").unwrap();
@@ -415,6 +418,7 @@ mod tests {
         );
     }
 
+    // `label: instruction` は、ラベル定義と命令の連続として扱う。
     #[test]
     fn parses_labeled_instruction_line() {
         let program = parse("loop: LOAD =1\n").unwrap();
@@ -445,6 +449,136 @@ mod tests {
         );
     }
 
+    // 命令の arity が固定なので、同じ行に複数命令があっても解析できる。
+    #[test]
+    fn parses_multiple_instructions_on_one_line() {
+        let program = parse("start: LOAD =1 ADD =1 JUMP start").unwrap();
+
+        assert_eq!(
+            program.items,
+            vec![
+                Item::Label(Label {
+                    name: "start".to_string(),
+                    span: Span {
+                        line: 0,
+                        start: 0,
+                        end: 6,
+                    },
+                }),
+                Item::Instruction(InstructionNode {
+                    instruction: Instruction::Unary {
+                        opcode: Opcode::Load,
+                        operand: Operand::Immediate(1),
+                    },
+                    span: Span {
+                        line: 0,
+                        start: 7,
+                        end: 14,
+                    },
+                }),
+                Item::Instruction(InstructionNode {
+                    instruction: Instruction::Unary {
+                        opcode: Opcode::Add,
+                        operand: Operand::Immediate(1),
+                    },
+                    span: Span {
+                        line: 0,
+                        start: 15,
+                        end: 21,
+                    },
+                }),
+                Item::Instruction(InstructionNode {
+                    instruction: Instruction::Jump {
+                        opcode: Opcode::Jump,
+                        label: "start".to_string(),
+                    },
+                    span: Span {
+                        line: 0,
+                        start: 22,
+                        end: 32,
+                    },
+                }),
+            ]
+        );
+    }
+
+    // 改行は命令区切りではなく空白と同じ区切り文字として扱う。
+    #[test]
+    fn parses_same_items_with_or_without_newlines() {
+        let with_newlines = parse("start:\nLOAD =1\nADD =1\nJUMP start\n").unwrap();
+        let without_newlines = parse("start: LOAD =1 ADD =1 JUMP start").unwrap();
+
+        let with_newlines_kinds = with_newlines
+            .items
+            .into_iter()
+            .map(item_without_span)
+            .collect::<Vec<_>>();
+        let without_newlines_kinds = without_newlines
+            .items
+            .into_iter()
+            .map(item_without_span)
+            .collect::<Vec<_>>();
+
+        assert_eq!(with_newlines_kinds, without_newlines_kinds);
+    }
+
+    // オペランドを必要とする命令が入力終端に到達した場合はエラーにする。
+    #[test]
+    fn rejects_instruction_without_operand() {
+        let error = parse("LOAD").unwrap_err();
+
+        assert!(matches!(
+            error,
+            ParseSourceError::Parse(ParseError::UnexpectedEof { .. })
+        ));
+    }
+
+    // ジャンプ命令の対象はラベル名であり、数値ではない。
+    #[test]
+    fn rejects_jump_with_number_target() {
+        let error = parse("JUMP 1").unwrap_err();
+
+        assert!(matches!(
+            error,
+            ParseSourceError::Parse(ParseError::UnexpectedToken { .. })
+        ));
+    }
+
+    // SJ の第 3 オペランドは必須のラベル名である。
+    #[test]
+    fn rejects_sj_with_missing_label() {
+        let error = parse("SJ 0,=1").unwrap_err();
+
+        assert!(matches!(
+            error,
+            ParseSourceError::Parse(ParseError::UnexpectedEof { .. })
+        ));
+    }
+
+    // 通常命令のオペランドにはラベル名を使えない。
+    #[test]
+    fn rejects_unary_instruction_with_label_operand() {
+        let error = parse("LOAD loop").unwrap_err();
+
+        assert!(matches!(
+            error,
+            ParseSourceError::Parse(ParseError::UnexpectedToken { .. })
+        ));
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum ItemWithoutSpan {
+        Label(String),
+        Instruction(Instruction),
+    }
+
+    fn item_without_span(item: Item) -> ItemWithoutSpan {
+        match item {
+            Item::Label(label) => ItemWithoutSpan::Label(label.name),
+            Item::Instruction(instruction) => ItemWithoutSpan::Instruction(instruction.instruction),
+        }
+    }
+
     const SAMPLE_RAM_DIR: &str = "../../RAM.dir";
 
     fn sample_ram_dir() -> std::path::PathBuf {
@@ -464,6 +598,7 @@ mod tests {
         files
     }
 
+    // サンプル群を一括で解析し、失敗時はファイルごとのエラーをまとめて出す。
     #[test]
     fn parses_all_sample_ram_files() {
         let mut failures = Vec::new();
