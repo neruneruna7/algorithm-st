@@ -1,15 +1,15 @@
 use crate::lexer::{Opcode, Span};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// RAM命令のオペランドを表す
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operand {
     Direct(usize),   // 直接アドレッシング
     Indirect(usize), // 間接アドレッシング
     Immediate(i32),  // 即値
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// RAM命令を表す
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
     Unary {
         opcode: Opcode,
@@ -27,30 +27,30 @@ pub enum Instruction {
     }, // Sj命令 特殊なもの
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// ラベル
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
     pub name: String,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// 命令
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstructionLine {
     pub instruction: Instruction,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// プログラムのアイテムごと，実質的に行ごとに分けたもの
 /// ラベルと命令は同じ行に書かないことを前提とする
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgramItem {
     Label(Label),
     Instruction(InstructionLine),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 /// プログラム全体
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
     pub items: Vec<ProgramItem>,
 }

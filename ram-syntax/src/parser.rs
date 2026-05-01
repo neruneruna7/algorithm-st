@@ -6,6 +6,7 @@ use crate::lexer::{self, LexError, Opcode, Span, Token, TokenKind};
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ParseError {
     #[error("expected {expected}, found {found} at {span}")]
+    /// 期待したトークンではなかった
     UnexpectedToken {
         expected: String,
         found: String,
@@ -13,36 +14,42 @@ pub enum ParseError {
     },
 
     #[error("expected {expected}, found end of input")]
+    /// 期待したトークンが見つからず、入力の終わりに達した
     UnexpectedEof { expected: String },
 
     #[error("instruction is not allowed on label line at {span}")]
+    /// ラベル行に命令が続いている
     InstructionOnLabelLine { span: Span },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ParseSourceError {
     #[error(transparent)]
+    /// 字句解析エラー
     Lex(#[from] LexError),
 
     #[error(transparent)]
+    /// 構文解析エラー
     Parse(#[from] ParseError),
 }
 
 #[derive(Debug, Clone)]
-pub struct Parse {
+pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
 }
 
-impl Parse {
+impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, current: 0 }
     }
 
+    /// トークン列全体を構文解析し、意味を持つ行だけを `ProgramItem` として残す。
     pub fn parse(mut self) -> Result<Program, ParseError> {
         let mut items = Vec::new();
 
         while !self.is_at_end() {
+            // 空行は RAM プログラムの意味に影響しないため、AST には残さない。
             self.skip_newlines();
 
             if self.is_at_end() {
@@ -55,6 +62,7 @@ impl Parse {
         Ok(Program { items })
     }
 
+    /// 空行ではない 1 行を、ラベル行または命令行として解析する。
     fn parse_item(&mut self) -> Result<ProgramItem, ParseError> {
         if self.is_label_line() {
             self.parse_label_line()
@@ -63,11 +71,13 @@ impl Parse {
         }
     }
 
+    /// `label:` 形式のラベル行を解析する。
     fn parse_label_line(&mut self) -> Result<ProgramItem, ParseError> {
         let label = self.expect_label_name("label name")?;
         let colon = self.expect_kind(TokenExpectation::Colon)?;
         let span = join_span(&label.span, &colon.span);
 
+        // この言語仕様では、ラベル行と命令行を同じ行に書かない。
         if let Some(token) = self.peek()
             && !matches!(token.kind, TokenKind::Newline)
         {
@@ -84,6 +94,7 @@ impl Parse {
         }))
     }
 
+    /// 命令を 1 行ぶん解析し、行全体の span を付ける。
     fn parse_instruction_line(&mut self) -> Result<ProgramItem, ParseError> {
         let start = self.peek().map(|token| token.span.clone()).ok_or_else(|| {
             ParseError::UnexpectedEof {
@@ -101,9 +112,11 @@ impl Parse {
         }))
     }
 
+    /// 命令をパースする
     fn parse_instruction(&mut self) -> Result<Instruction, ParseError> {
         let opcode = self.expect_opcode()?;
 
+        // Opcode ごとに、後続に期待する構文が異なる。
         match opcode {
             Opcode::Load
             | Opcode::Store
@@ -141,6 +154,7 @@ impl Parse {
         }
     }
 
+    /// `n`, `*n`, `=n` を、それぞれ直接・間接・即値オペランドに変換する。
     fn parse_operand(&mut self) -> Result<Operand, ParseError> {
         match self.peek().map(|token| &token.kind) {
             Some(TokenKind::Number(_)) => {
@@ -164,6 +178,7 @@ impl Parse {
         }
     }
 
+    /// 現在位置のトークンが opcode であることを確認して読み進める。
     fn expect_opcode(&mut self) -> Result<Opcode, ParseError> {
         let token = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
             expected: "opcode".to_string(),
@@ -175,6 +190,7 @@ impl Parse {
         }
     }
 
+    /// 現在位置のトークンがラベル名であることを確認して読み進める。
     fn expect_label_name(&mut self, expected: &str) -> Result<Token, ParseError> {
         let token = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
             expected: expected.to_string(),
@@ -186,6 +202,7 @@ impl Parse {
         }
     }
 
+    /// 現在位置のトークンが数値であることを確認して読み進める。
     fn expect_number(&mut self, expected: &str) -> Result<i32, ParseError> {
         let token = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
             expected: expected.to_string(),
@@ -197,6 +214,7 @@ impl Parse {
         }
     }
 
+    /// `:` や `,` のような固定記号を期待して読み進める。
     fn expect_kind(&mut self, expectation: TokenExpectation) -> Result<Token, ParseError> {
         let token = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
             expected: expectation.description().to_string(),
@@ -209,6 +227,7 @@ impl Parse {
         }
     }
 
+    /// 命令の後ろに余分なトークンがないことを確認する。
     fn expect_line_end(&mut self) -> Result<(), ParseError> {
         match self.peek() {
             Some(Token {
@@ -223,6 +242,7 @@ impl Parse {
         }
     }
 
+    /// 行末の改行を 1 つだけ消費する。入力末尾の改行なしも許可する。
     fn consume_optional_newline(&mut self) {
         if matches!(
             self.peek().map(|token| &token.kind),
@@ -232,6 +252,7 @@ impl Parse {
         }
     }
 
+    /// 連続する空行を読み飛ばす。
     fn skip_newlines(&mut self) {
         while matches!(
             self.peek().map(|token| &token.kind),
@@ -241,6 +262,7 @@ impl Parse {
         }
     }
 
+    /// ラベル行の判定だけは `LabelName Colon` を見るため 2 トークン先読みする。
     fn is_label_line(&self) -> bool {
         matches!(
             (
@@ -309,7 +331,7 @@ impl TokenExpectation {
 }
 
 pub fn parse_tokens(tokens: Vec<Token>) -> Result<Program, ParseError> {
-    Parse::new(tokens).parse()
+    Parser::new(tokens).parse()
 }
 
 pub fn parse(input: &str) -> Result<Program, ParseSourceError> {
