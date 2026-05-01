@@ -1,0 +1,6 @@
+
+	READ 2
+	LOAD =5
+	WRITE 2
+	WRITE 0
+	HALT

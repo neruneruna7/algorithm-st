@@ -1,0 +1,23 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Title: Using an array in a RAM program
+;; Author: Osami Yamamoto
+;; Date: Fri Apr 10 12:19:18 JST 2009
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	LOAD =10
+	STORE 1
+loop:
+	LOAD 1
+	STORE *1
+	LOAD 1
+	ADD =1
+	STORE 1
+	SUB =20
+	JZERO skip
+	JUMP loop
+skip:
+	WRITE 11
+	HALT
+
+
+	
+	

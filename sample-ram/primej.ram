@@ -1,0 +1,63 @@
+;;******************************************
+;; タイトル：エラトステネスのふるい
+;; 著者：山本修身 (osami@ccmfs.meijo-u.ac.jp)
+;; 日付：2009年 4月11日 土曜日 15時37分53秒 JST
+;;******************************************
+
+start:
+	; ---------------------------------
+	; メモリの初期化を行う
+	; 10番地以降が配列データ
+	; ---------------------------------
+	LOAD =10
+	STORE 1      ; r1 ←  10
+loop1:
+	LOAD =1      ; r[r1] ←  1
+	STORE *1
+	LOAD 1       ; r1 ←  r1 + 1
+	ADD =1
+	STORE 1
+	SUB =1010    ; r1が1010を超えたらskip1へ
+	JGTZ skip1
+	JUMP loop1   ; そうでなければloop1へ
+skip1:  
+	WRITE =8888  ; スタートの印
+	; ---------------------------------
+	; 計算開始
+	; ---------------------------------
+	LOAD =2      ; r1 ←  1
+	STORE 1
+loop3:
+	LOAD 1       ; r0 ←  r[r1 + 10]
+	ADD =10
+	LOAD *0   
+	JZERO skip2  ; ゼロだったら skip2へ
+	WRITE 1      ; r1は素数なので出力する
+	LOAD 1       ; r2 ←  r1 + r1
+	ADD 1
+	STORE 2
+loop2:
+	LOAD 2       ; r[r2 + 10] ←  0
+	ADD =10
+	STORE 3
+	LOAD =0
+	STORE *3
+	LOAD 2       ; r2 ←  r2 + r1
+	ADD 1
+	STORE 2
+	SUB =1000    ; 1000を超えたらskip2へ
+	JGTZ skip2
+	JUMP loop2   ; そうでなければloop2へ戻る
+skip2:
+	LOAD 1       ; r1 ←  r1 + 1
+	ADD =1
+	STORE 1
+	SUB =1000    ; r1が1000を超えたらskip3へ
+	JZERO skip3
+	JUMP loop3   ; そうでなければloop3へ戻る
+skip3:
+	HALT         ; 実行終了
+
+	
+
+	

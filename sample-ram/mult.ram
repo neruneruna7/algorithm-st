@@ -1,0 +1,15 @@
+
+	LOAD =343
+	STORE 1
+	LOAD =235
+
+	SJ 2, 2, L1
+L1:	SJ 2, 0, L2
+L2:	SJ 3, 3, L3
+L3:	SJ 3, 2, L4
+L4:	SJ 1, =1, skip
+	SJ 4, 4, L3
+skip:
+
+	WRITE 3
+	HALT

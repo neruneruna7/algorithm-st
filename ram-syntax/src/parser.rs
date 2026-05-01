@@ -473,4 +473,46 @@ mod tests {
             })
         );
     }
+
+    const SAMPLE_RAM_DIR: &str = "../../RAM.dir";
+
+    fn sample_ram_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join(SAMPLE_RAM_DIR)
+    }
+
+    fn sample_ram_files() -> Vec<std::path::PathBuf> {
+        let mut files = std::fs::read_dir(sample_ram_dir())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|extension| extension == "ram"))
+            .collect::<Vec<_>>();
+
+        files.sort();
+        files
+    }
+
+    #[test]
+    fn parses_all_sample_ram_files() {
+        let mut failures = Vec::new();
+
+        for path in sample_ram_files() {
+            let input = std::fs::read_to_string(&path).unwrap();
+
+            if let Err(error) = parse(&input) {
+                let file_name = path
+                    .file_name()
+                    .and_then(|file_name| file_name.to_str())
+                    .unwrap_or("<unknown>");
+                failures.push(format!("{SAMPLE_RAM_DIR}/{file_name}: {error}"));
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "failed to parse sample RAM files:\n{}",
+            failures.join("\n")
+        );
+    }
 }
