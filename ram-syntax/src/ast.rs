@@ -36,21 +36,20 @@ pub struct Label {
 
 /// 命令
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstructionLine {
+pub struct InstructionNode {
     pub instruction: Instruction,
     pub span: Span,
 }
 
-/// プログラムのアイテムごと，実質的に行ごとに分けたもの
-/// ラベルと命令は同じ行に書かないことを前提とする
+/// プログラムを構成する上位ノード
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProgramItem {
+pub enum Item {
     Label(Label),
-    Instruction(InstructionLine),
+    Instruction(InstructionNode),
 }
 
 /// プログラム全体
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Program {
-    pub items: Vec<ProgramItem>,
+    pub items: Vec<Item>,
 }

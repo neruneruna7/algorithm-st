@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ast::{Instruction, InstructionLine, Label, Operand, Program, ProgramItem};
+use crate::ast::{Instruction, InstructionNode, Item, Label, Operand, Program};
 use crate::lexer::{self, LexError, Opcode, Span, Token, TokenKind};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -16,10 +16,6 @@ pub enum ParseError {
     #[error("expected {expected}, found end of input")]
     /// 期待したトークンが見つからず、入力の終わりに達した
     UnexpectedEof { expected: String },
-
-    #[error("instruction is not allowed on label line at {span}")]
-    /// ラベル行に命令が続いている
-    InstructionOnLabelLine { span: Span },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -44,12 +40,12 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
-    /// トークン列全体を構文解析し、意味を持つ行だけを `ProgramItem` として残す。
+    /// トークン列全体を構文解析し、ラベル定義と命令を順に `Item` として残す。
     pub fn parse(mut self) -> Result<Program, ParseError> {
         let mut items = Vec::new();
 
         while !self.is_at_end() {
-            // 空行は RAM プログラムの意味に影響しないため、AST には残さない。
+            // 改行は命令区切りではなく、空白と同じ区切り文字として扱う。
             self.skip_newlines();
 
             if self.is_at_end() {
@@ -62,40 +58,28 @@ impl Parser {
         Ok(Program { items })
     }
 
-    /// 空行ではない 1 行を、ラベル行または命令行として解析する。
-    fn parse_item(&mut self) -> Result<ProgramItem, ParseError> {
-        if self.is_label_line() {
-            self.parse_label_line()
+    /// 空白ではない 1 つの構文要素を、ラベル定義または命令として解析する。
+    fn parse_item(&mut self) -> Result<Item, ParseError> {
+        if self.is_label_definition() {
+            self.parse_label()
         } else {
-            self.parse_instruction_line()
+            self.parse_instruction_node()
         }
     }
 
-    /// `label:` 形式のラベル行を解析する。
-    fn parse_label_line(&mut self) -> Result<ProgramItem, ParseError> {
+    /// `label:` 形式のラベル定義を解析する。
+    fn parse_label(&mut self) -> Result<Item, ParseError> {
         let label = self.expect_label_name("label name")?;
         let colon = self.expect_kind(TokenExpectation::Colon)?;
-        let span = join_span(&label.span, &colon.span);
 
-        // この言語仕様では、ラベル行と命令行を同じ行に書かない。
-        if let Some(token) = self.peek()
-            && !matches!(token.kind, TokenKind::Newline)
-        {
-            return Err(ParseError::InstructionOnLabelLine {
-                span: token.span.clone(),
-            });
-        }
-
-        self.consume_optional_newline();
-
-        Ok(ProgramItem::Label(Label {
+        Ok(Item::Label(Label {
             name: label_name(&label),
-            span,
+            span: join_span(&label.span, &colon.span),
         }))
     }
 
-    /// 命令を 1 行ぶん解析し、行全体の span を付ける。
-    fn parse_instruction_line(&mut self) -> Result<ProgramItem, ParseError> {
+    /// 命令を 1 つ解析し、命令ノード全体の span を付ける。
+    fn parse_instruction_node(&mut self) -> Result<Item, ParseError> {
         let start = self.peek().map(|token| token.span.clone()).ok_or_else(|| {
             ParseError::UnexpectedEof {
                 expected: "instruction".to_string(),
@@ -104,9 +88,7 @@ impl Parser {
         let instruction = self.parse_instruction()?;
         let end = self.previous_span().unwrap_or_else(|| start.clone());
 
-        self.expect_line_end()?;
-
-        Ok(ProgramItem::Instruction(InstructionLine {
+        Ok(Item::Instruction(InstructionNode {
             instruction,
             span: join_span(&start, &end),
         }))
@@ -227,31 +209,6 @@ impl Parser {
         }
     }
 
-    /// 命令の後ろに余分なトークンがないことを確認する。
-    fn expect_line_end(&mut self) -> Result<(), ParseError> {
-        match self.peek() {
-            Some(Token {
-                kind: TokenKind::Newline,
-                ..
-            }) => {
-                self.advance();
-                Ok(())
-            }
-            Some(_) => Err(self.unexpected_current("end of line")),
-            None => Ok(()),
-        }
-    }
-
-    /// 行末の改行を 1 つだけ消費する。入力末尾の改行なしも許可する。
-    fn consume_optional_newline(&mut self) {
-        if matches!(
-            self.peek().map(|token| &token.kind),
-            Some(TokenKind::Newline)
-        ) {
-            self.advance();
-        }
-    }
-
     /// 連続する空行を読み飛ばす。
     fn skip_newlines(&mut self) {
         while matches!(
@@ -262,8 +219,8 @@ impl Parser {
         }
     }
 
-    /// ラベル行の判定だけは `LabelName Colon` を見るため 2 トークン先読みする。
-    fn is_label_line(&self) -> bool {
+    /// ラベル定義の判定だけは `LabelName Colon` を見るため 2 トークン先読みする。
+    fn is_label_definition(&self) -> bool {
         matches!(
             (
                 self.peek().map(|token| &token.kind),
@@ -374,7 +331,7 @@ mod tests {
             program,
             Program {
                 items: vec![
-                    ProgramItem::Label(Label {
+                    Item::Label(Label {
                         name: "start".to_string(),
                         span: Span {
                             line: 0,
@@ -382,7 +339,7 @@ mod tests {
                             end: 6,
                         },
                     }),
-                    ProgramItem::Instruction(InstructionLine {
+                    Item::Instruction(InstructionNode {
                         instruction: Instruction::Unary {
                             opcode: Opcode::Load,
                             operand: Operand::Immediate(10),
@@ -393,7 +350,7 @@ mod tests {
                             end: 8,
                         },
                     }),
-                    ProgramItem::Instruction(InstructionLine {
+                    Item::Instruction(InstructionNode {
                         instruction: Instruction::Jump {
                             opcode: Opcode::Jump,
                             label: "start".to_string(),
@@ -404,7 +361,7 @@ mod tests {
                             end: 10,
                         },
                     }),
-                    ProgramItem::Instruction(InstructionLine {
+                    Item::Instruction(InstructionNode {
                         instruction: Instruction::Halt,
                         span: Span {
                             line: 3,
@@ -423,7 +380,7 @@ mod tests {
 
         assert_eq!(
             program.items,
-            vec![ProgramItem::Instruction(InstructionLine {
+            vec![Item::Instruction(InstructionNode {
                 instruction: Instruction::Unary {
                     opcode: Opcode::Load,
                     operand: Operand::Direct(1),
@@ -443,7 +400,7 @@ mod tests {
 
         assert_eq!(
             program.items,
-            vec![ProgramItem::Instruction(InstructionLine {
+            vec![Item::Instruction(InstructionNode {
                 instruction: Instruction::Sj {
                     lhs: Operand::Direct(0),
                     rhs: Operand::Immediate(2),
@@ -459,18 +416,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_instruction_on_label_line() {
-        let error = parse("loop: LOAD =1\n").unwrap_err();
+    fn parses_labeled_instruction_line() {
+        let program = parse("loop: LOAD =1\n").unwrap();
 
         assert_eq!(
-            error,
-            ParseSourceError::Parse(ParseError::InstructionOnLabelLine {
-                span: Span {
-                    line: 0,
-                    start: 6,
-                    end: 10,
-                },
-            })
+            program.items,
+            vec![
+                Item::Label(Label {
+                    name: "loop".to_string(),
+                    span: Span {
+                        line: 0,
+                        start: 0,
+                        end: 5,
+                    },
+                }),
+                Item::Instruction(InstructionNode {
+                    instruction: Instruction::Unary {
+                        opcode: Opcode::Load,
+                        operand: Operand::Immediate(1),
+                    },
+                    span: Span {
+                        line: 0,
+                        start: 6,
+                        end: 13,
+                    },
+                }),
+            ]
         );
     }
 
