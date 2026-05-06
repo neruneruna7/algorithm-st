@@ -291,6 +291,34 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<Program, ParseError> {
     Parser::new(tokens).parse()
 }
 
+/// 入力文字列を RAM プログラムの AST に変換する
+///
+/// ```
+/// use ram_syntax::ast::{Instruction, Item, Operand};
+/// use ram_syntax::lexer::Opcode;
+/// use ram_syntax::parser::parse;
+///
+/// let program = parse("start: LOAD =1 ADD =1 JUMP start").unwrap();
+///
+/// assert_eq!(program.items.len(), 4);
+/// assert!(matches!(&program.items[0], Item::Label(label) if label.name == "start"));
+/// assert!(matches!(
+///     &program.items[1],
+///     Item::Instruction(node)
+///         if node.instruction == Instruction::Unary {
+///             opcode: Opcode::Load,
+///             operand: Operand::Immediate(1),
+///         }
+/// ));
+/// assert!(matches!(
+///     &program.items[3],
+///     Item::Instruction(node)
+///         if node.instruction == Instruction::Jump {
+///             opcode: Opcode::Jump,
+///             label: "start".to_string(),
+///         }
+/// ));
+/// ```
 pub fn parse(input: &str) -> Result<Program, ParseSourceError> {
     let tokens = lexer::tokenize(input)?;
     Ok(parse_tokens(tokens)?)
