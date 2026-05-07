@@ -1,0 +1,12 @@
+{
+  "name": "tree-sitter-ram",
+  "version": "0.0.1",
+  "description": "Tree-sitter grammar for RAM programs.",
+  "license": "MIT",
+  "tree-sitter": [
+    {
+      "scope": "source.ram",
+      "file-types": ["ram"]
+    }
+  ]
+}

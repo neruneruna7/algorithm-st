@@ -1,0 +1,20 @@
+[package]
+name = "ram-zed"
+version = "0.0.1"
+edition = "2021"
+# この crate は Zed が dev extension としてビルドするためのもの。
+# crates.io に公開するライブラリではない。
+publish = false
+
+[lib]
+# Zed 拡張の Rust コードは WebAssembly component としてビルドされる。
+# そのため通常の rlib ではなく cdylib を生成する。
+crate-type = ["cdylib"]
+
+[dependencies]
+zed_extension_api = "0.7.0"
+
+# This crate is compiled by Zed as a standalone WebAssembly extension.
+# Keeping it out of the parent workspace avoids changing the Rust workspace
+# membership only for editor integration code.
+[workspace]

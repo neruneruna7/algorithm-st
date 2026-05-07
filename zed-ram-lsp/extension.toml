@@ -1,0 +1,24 @@
+id = "ram"
+name = "RAM"
+version = "0.0.1"
+schema_version = 1
+authors = ["kino"]
+description = "RAM language support backed by ram-lsp."
+repository = "https://github.com/kino/algorithm-st"
+
+# Zed は extension.toml の language_servers 設定を見て、
+# どの言語にどの LSP を接続するかを決定する。
+# `languages` の値は languages/ram/config.toml の `name` と一致させる必要がある。
+[language_servers.ram-lsp]
+name = "RAM LSP"
+languages = ["RAM"]
+
+# Zed の言語拡張では、言語設定側の `grammar = "ram"` に対応する
+# Tree-sitter grammar をここで登録する必要がある。
+[grammars.ram]
+# Local development grammar. When publishing this extension, replace this with a
+# public tree-sitter grammar repository and a pinned commit/rev.
+# この file:// URL はローカル開発用であり、このマシン上の絶対パスに依存する。
+# 公開する場合は、RAM grammar を別リポジトリに置き、commit hash を固定する。
+repository = "file:///Users/kino/workspace/univ/m1/algorithm-st/zed-ram-lsp/grammars/tree-sitter-ram"
+rev = "HEAD"

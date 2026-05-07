@@ -1,0 +1,21 @@
+name = "RAM"
+
+# extension.toml の [grammars.ram] と対応する grammar 名。
+# Zed はこの値を使って Tree-sitter grammar と query ファイルを結びつける。
+grammar = "ram"
+
+# `*.ram` を RAM 言語として開くための関連付け。
+path_suffixes = ["ram"]
+
+# RAM.dir のサンプルと lexer 実装に合わせて、`;` 以降を行コメントとして扱う。
+line_comments = ["; "]
+
+# RAM はブロック構造を持たないため、インデント設定は控えめに固定する。
+tab_size = 4
+hard_tabs = false
+
+# RAM 構文自体では括弧は主要構文ではないが、エディタの自動補完設定として
+# 追加しておく。不要になれば削除してよい。
+brackets = [
+  { start = "(", end = ")", close = true, newline = false },
+]
