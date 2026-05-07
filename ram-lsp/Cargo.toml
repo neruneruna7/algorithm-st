@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 ram-syntax = { path = "../ram-syntax" }
-tokio = { version = "1.52.1", features = ["io-std", "macros", "rt-multi-thread"] }
+tokio = { version = "1.52.1", features = ["io-std", "macros", "rt-multi-thread", "sync"] }
 tower-lsp = "0.20.0"

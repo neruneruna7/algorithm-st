@@ -1,4 +1,5 @@
 mod backend;
+mod completions;
 mod diagnostics;
 
 use tower_lsp::{LspService, Server};
