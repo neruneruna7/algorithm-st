@@ -17,15 +17,24 @@ pub enum Instruction {
     /// オペランドを 1 つ取る通常命令。
     Unary { opcode: Opcode, operand: Operand },
     /// ラベル名を 1 つ取るジャンプ命令。
-    Jump { opcode: Opcode, label: String },
+    Jump { opcode: Opcode, label: LabelRef },
     /// 停止命令。
     Halt,
     /// `SJ X,Y,Z`。`X - Y` を `X` に代入し、結果が 0 なら `Z` へジャンプする。
     Sj {
         lhs: Operand,
         rhs: Operand,
-        label: String,
+        label: LabelRef,
     },
+}
+
+/// ラベル参照
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelRef {
+    /// 参照先のラベル名
+    pub name: String,
+    /// ラベル参照のソース位置
+    pub span: Span,
 }
 
 /// ラベル定義

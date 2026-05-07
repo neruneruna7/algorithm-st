@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::ast::{Instruction, InstructionNode, Item, Label, Operand, Program};
+use crate::ast::{Instruction, InstructionNode, Item, Label, LabelRef, Operand, Program};
 use crate::lexer::{self, LexError, Opcode, Span, Token, TokenKind};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -116,7 +116,7 @@ impl Parser {
 
                 Ok(Instruction::Jump {
                     opcode,
-                    label: label_name(&label),
+                    label: label_ref(&label),
                 })
             }
             Opcode::Halt => Ok(Instruction::Halt),
@@ -130,7 +130,7 @@ impl Parser {
                 Ok(Instruction::Sj {
                     lhs,
                     rhs,
-                    label: label_name(&label),
+                    label: label_ref(&label),
                 })
             }
         }
@@ -312,11 +312,10 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<Program, ParseError> {
 /// ));
 /// assert!(matches!(
 ///     &program.items[3],
-///     Item::Instruction(node)
-///         if node.instruction == Instruction::Jump {
-///             opcode: Opcode::Jump,
-///             label: "start".to_string(),
-///         }
+///     Item::Instruction(node) if matches!(
+///         &node.instruction,
+///         Instruction::Jump { opcode: Opcode::Jump, label } if label.name == "start"
+///     )
 /// ));
 /// ```
 pub fn parse(input: &str) -> Result<Program, ParseSourceError> {
@@ -328,6 +327,13 @@ fn label_name(token: &Token) -> String {
     match &token.kind {
         TokenKind::LabelName(name) => name.clone(),
         _ => unreachable!("token must be a label name"),
+    }
+}
+
+fn label_ref(token: &Token) -> LabelRef {
+    LabelRef {
+        name: label_name(token),
+        span: token.span.clone(),
     }
 }
 
@@ -382,7 +388,14 @@ mod tests {
                     Item::Instruction(InstructionNode {
                         instruction: Instruction::Jump {
                             opcode: Opcode::Jump,
-                            label: "start".to_string(),
+                            label: LabelRef {
+                                name: "start".to_string(),
+                                span: Span {
+                                    line: 2,
+                                    start: 5,
+                                    end: 10,
+                                },
+                            },
                         },
                         span: Span {
                             line: 2,
@@ -435,7 +448,14 @@ mod tests {
                 instruction: Instruction::Sj {
                     lhs: Operand::Direct(0),
                     rhs: Operand::Immediate(2),
-                    label: "L1".to_string(),
+                    label: LabelRef {
+                        name: "L1".to_string(),
+                        span: Span {
+                            line: 0,
+                            start: 8,
+                            end: 10,
+                        },
+                    },
                 },
                 span: Span {
                     line: 0,
@@ -518,7 +538,14 @@ mod tests {
                 Item::Instruction(InstructionNode {
                     instruction: Instruction::Jump {
                         opcode: Opcode::Jump,
-                        label: "start".to_string(),
+                        label: LabelRef {
+                            name: "start".to_string(),
+                            span: Span {
+                                line: 0,
+                                start: 27,
+                                end: 32,
+                            },
+                        },
                     },
                     span: Span {
                         line: 0,
@@ -597,13 +624,51 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq)]
     enum ItemWithoutSpan {
         Label(String),
-        Instruction(Instruction),
+        Instruction(InstructionWithoutSpan),
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum InstructionWithoutSpan {
+        Unary {
+            opcode: Opcode,
+            operand: Operand,
+        },
+        Jump {
+            opcode: Opcode,
+            label: String,
+        },
+        Halt,
+        Sj {
+            lhs: Operand,
+            rhs: Operand,
+            label: String,
+        },
     }
 
     fn item_without_span(item: Item) -> ItemWithoutSpan {
         match item {
             Item::Label(label) => ItemWithoutSpan::Label(label.name),
-            Item::Instruction(instruction) => ItemWithoutSpan::Instruction(instruction.instruction),
+            Item::Instruction(instruction) => {
+                ItemWithoutSpan::Instruction(instruction_without_span(instruction.instruction))
+            }
+        }
+    }
+
+    fn instruction_without_span(instruction: Instruction) -> InstructionWithoutSpan {
+        match instruction {
+            Instruction::Unary { opcode, operand } => {
+                InstructionWithoutSpan::Unary { opcode, operand }
+            }
+            Instruction::Jump { opcode, label } => InstructionWithoutSpan::Jump {
+                opcode,
+                label: label.name,
+            },
+            Instruction::Halt => InstructionWithoutSpan::Halt,
+            Instruction::Sj { lhs, rhs, label } => InstructionWithoutSpan::Sj {
+                lhs,
+                rhs,
+                label: label.name,
+            },
         }
     }
 
