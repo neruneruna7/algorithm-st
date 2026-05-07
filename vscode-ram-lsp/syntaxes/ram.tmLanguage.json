@@ -1,0 +1,76 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "RAM",
+  "scopeName": "source.ram",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#labels" },
+    { "include": "#opcodes" },
+    { "include": "#immediates" },
+    { "include": "#indirects" },
+    { "include": "#numbers" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.ram",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.definition.ram",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*:)"
+        }
+      ]
+    },
+    "opcodes": {
+      "patterns": [
+        {
+          "name": "keyword.control.instruction.ram",
+          "match": "\\b(?:LOAD|STORE|ADD|SUB|MULT|DIV|JUMP|JZERO|JGTZ|READ|WRITE|HALT|SJ)\\b"
+        }
+      ]
+    },
+    "immediates": {
+      "patterns": [
+        {
+          "name": "constant.numeric.immediate.ram",
+          "match": "=[0-9]+"
+        }
+      ]
+    },
+    "indirects": {
+      "patterns": [
+        {
+          "name": "variable.other.indirect.ram",
+          "match": "\\*[0-9]+"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.ram",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.ram",
+          "match": ","
+        },
+        {
+          "name": "punctuation.definition.label.ram",
+          "match": ":"
+        }
+      ]
+    }
+  }
+}

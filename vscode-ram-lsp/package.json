@@ -15,7 +15,15 @@
       {
         "id": "ram",
         "aliases": ["RAM", "ram"],
-        "extensions": [".ram"]
+        "extensions": [".ram"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ram",
+        "scopeName": "source.ram",
+        "path": "./syntaxes/ram.tmLanguage.json"
       }
     ],
     "configuration": {
