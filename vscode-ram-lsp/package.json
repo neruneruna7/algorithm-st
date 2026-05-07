@@ -1,0 +1,44 @@
+{
+  "name": "ram-lsp-client",
+  "displayName": "RAM LSP Client",
+  "description": "VS Code client for the RAM language server.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:ram"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ram",
+        "aliases": ["RAM", "ram"],
+        "extensions": [".ram"]
+      }
+    ],
+    "configuration": {
+      "title": "RAM LSP",
+      "properties": {
+        "ramLsp.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the ram-lsp executable. If empty, the extension tries to use the workspace target/debug/ram-lsp binary."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.0.0"
+  }
+}
