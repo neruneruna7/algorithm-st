@@ -746,7 +746,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result.registers[10], factorial(n));
+        assert_eq!(result.registers[7], factorial(n));
         assert_eq!(result.output, vec![factorial(n)]);
     }
 
@@ -771,7 +771,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
 
             assert_eq!(
-                result.registers[10],
+                result.registers[7],
                 factorial(n),
                 "case {case_index} failed"
             );
