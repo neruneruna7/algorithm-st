@@ -37,7 +37,7 @@ pub enum Error {
     ParseOrResolve(resolver::ResolveSourceError),
     Io(std::io::Error),
     InvalidInputValue { value: String },
-    InvalidRegisterSpec { spec: String },
+    InvalidInitRegisterValue { line: usize, value: String },
     InvalidAddress { address: Word },
     ImmediateWrite,
     DivisionByZero,
@@ -52,8 +52,8 @@ impl fmt::Display for Error {
             Self::ParseOrResolve(error) => write!(f, "{error}"),
             Self::Io(error) => write!(f, "{error}"),
             Self::InvalidInputValue { value } => write!(f, "invalid input value: {value:?}"),
-            Self::InvalidRegisterSpec { spec } => {
-                write!(f, "invalid init_register spec: {spec:?}")
+            Self::InvalidInitRegisterValue { line, value } => {
+                write!(f, "invalid init_register value at line {line}: {value:?}")
             }
             Self::InvalidAddress { address } => {
                 write!(f, "invalid register address: {address}")
@@ -289,34 +289,21 @@ pub fn read_input_file(path: impl AsRef<Path>) -> Result<Vec<Word>, Error> {
         .collect()
 }
 
-pub fn parse_register_spec(spec: &str) -> Result<Vec<(usize, Word)>, Error> {
-    if spec.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    spec.split(',')
-        .map(|entry| {
-            let (address, value) = entry
-                .split_once('=')
-                .or_else(|| entry.split_once(':'))
-                .ok_or_else(|| Error::InvalidRegisterSpec {
-                    spec: entry.to_string(),
-                })?;
-            let address =
-                address
-                    .trim()
-                    .parse::<usize>()
-                    .map_err(|_| Error::InvalidRegisterSpec {
-                        spec: entry.to_string(),
+pub fn read_init_register_file(path: impl AsRef<Path>) -> Result<Vec<(usize, Word)>, Error> {
+    fs::read_to_string(path)?
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let line_number = index + 1;
+            let value =
+                line.trim()
+                    .parse::<Word>()
+                    .map_err(|_| Error::InvalidInitRegisterValue {
+                        line: line_number,
+                        value: line.to_string(),
                     })?;
-            let value = value
-                .trim()
-                .parse::<Word>()
-                .map_err(|_| Error::InvalidRegisterSpec {
-                    spec: entry.to_string(),
-                })?;
 
-            Ok((address, value))
+            Ok((line_number, value))
         })
         .collect()
 }
@@ -401,10 +388,16 @@ mod tests {
     }
 
     #[test]
-    fn parses_register_specs() {
-        assert_eq!(
-            parse_register_spec("1=10, 2:-3").unwrap(),
-            vec![(1, 10), (2, -3)]
-        );
+    fn reads_initial_registers_from_file_lines() {
+        let path = std::env::temp_dir().join(format!(
+            "algorithm-st-init-register-{}.txt",
+            std::process::id()
+        ));
+        std::fs::write(&path, "10\n-3\n0\n").unwrap();
+
+        let registers = read_init_register_file(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+
+        assert_eq!(registers, vec![(1, 10), (2, -3), (3, 0)]);
     }
 }

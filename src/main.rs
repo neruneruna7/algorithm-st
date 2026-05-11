@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use algorithm_st::{RunConfig, parse_register_spec, read_input_file, run_file};
+use algorithm_st::{RunConfig, read_init_register_file, read_input_file, run_file};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -18,9 +18,9 @@ struct Cli {
     #[arg(long = "input-file", alias = "input_file")]
     input_file: Option<PathBuf>,
 
-    /// Initial register values, such as `1=10,2=-3`.
-    #[arg(long = "init-register", alias = "init_register", value_parser = parse_register_spec)]
-    init_register: Vec<Vec<(usize, algorithm_st::Word)>>,
+    /// Initial register file. Line 1 initializes r1, line 2 initializes r2, and so on.
+    #[arg(long = "init-register", alias = "init_register")]
+    init_register: Option<PathBuf>,
 
     /// Maximum number of instructions to execute before stopping.
     #[arg(long = "max-steps", default_value_t = 1_000_000)]
@@ -41,10 +41,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(read_input_file)
         .transpose()?
         .unwrap_or_default();
+    let initial_registers = cli
+        .init_register
+        .map(read_init_register_file)
+        .transpose()?
+        .unwrap_or_default();
     let result = run_file(
         cli.program_path,
         RunConfig {
-            initial_registers: cli.init_register.into_iter().flatten().collect(),
+            initial_registers,
             input,
             max_steps: cli.max_steps,
         },
