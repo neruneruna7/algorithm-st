@@ -22,3 +22,8 @@ args = ["run", "--", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in"
 workspace = false
 command = "cargo"
 args = ["run", "--", "assignment/p1-3.ram", "--init-register", "assignment/p1-3.reg", ]
+
+[tasks.debug-p1-3]
+workspace = false
+command = "cargo"
+args = ["run", "--", "debug", "assignment/p1-3.ram", "--init-register", "assignment/p1-3.reg" ]
