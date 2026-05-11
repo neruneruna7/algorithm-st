@@ -1,3 +1,4 @@
+pub mod sample;
 use std::fmt;
 use std::fs;
 use std::path::Path;
