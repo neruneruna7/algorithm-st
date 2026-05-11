@@ -1,0 +1,13 @@
+
+[tasks.ram-test]
+# cargo run -- sample-ram/test.ram --input_file sample-ram/input_file
+description = "RAMのプログラムをテストするタスク"
+workspace = false
+command = "cargo"
+args = ["run", "--", "sample-ram/test.ram", "--input-file", "sample-ram/input_file" ]
+
+[tasks.p1-1]
+description = "p1-1: バブルソートアルゴリズムによって小さい方から大きい方へn個の数を並べ替えるRAMのプログラム"
+workspace = false
+command = "cargo"
+args = ["run", "--", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg", ]

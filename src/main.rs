@@ -1,6 +1,7 @@
+use std::io::Write;
 use std::path::PathBuf;
 
-use algorithm_st::{RunConfig, read_init_register_file, read_input_file, run_file};
+use algorithm_st::{RunConfig, Word, read_init_register_file, read_input_file, run_file};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -46,6 +47,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(read_init_register_file)
         .transpose()?
         .unwrap_or_default();
+
+    print_initial_state(&initial_registers, &input);
+
     let result = run_file(
         cli.program_path,
         RunConfig {
@@ -55,10 +59,63 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-    for value in result.output {
-        println!("{value}");
-    }
-    eprintln!("steps: {}", result.steps);
+    print_output(&result.output)?;
+
+    println!("steps: {}", result.steps);
+    print_registers("final registers", &result.registers);
 
     Ok(())
+}
+
+fn print_initial_state(initial_registers: &[(usize, Word)], input: &[Word]) {
+    let registers = initial_register_snapshot(initial_registers);
+    print_registers("initial registers", &registers);
+
+    println!("input:");
+    if input.is_empty() {
+        println!("  (empty)");
+    } else {
+        for (index, value) in input.iter().enumerate() {
+            println!("  input[{index}] = {value}");
+        }
+    }
+}
+
+fn initial_register_snapshot(initial_registers: &[(usize, Word)]) -> Vec<Word> {
+    let register_count = initial_registers
+        .iter()
+        .map(|(address, _)| *address + 1)
+        .max()
+        .unwrap_or(1);
+    let mut registers = vec![0; register_count];
+
+    for (address, value) in initial_registers {
+        registers[*address] = *value;
+    }
+
+    registers
+}
+
+fn print_output(output: &[Word]) -> std::io::Result<()> {
+    println!("WRITE:");
+    if output.is_empty() {
+        println!("  (empty)");
+    } else {
+        for value in output {
+            println!("  {value}");
+        }
+    }
+
+    std::io::stdout().flush()
+}
+
+fn print_registers(title: &str, registers: &[Word]) {
+    println!("{title}:");
+    if registers.is_empty() {
+        println!("  (none)");
+    } else {
+        for (address, value) in registers.iter().enumerate() {
+            println!("  r{address} = {value}");
+        }
+    }
 }
