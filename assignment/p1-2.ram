@@ -1,167 +1,111 @@
-; - 1番地に正の整数nが与えられている．
-; - a^2 + b^2 + c^2 + d^2 = n となる非負整数a,b,c,dをWRITEで出力する．
-;
-; 使う工夫:
-;   1. 先にnから4の因子を取り除く．
-;      n = 4^k m の形にして，まずmの解を探す．
-;      m = a^2 + b^2 + c^2 + d^2 なら，
-;      n = (2^k a)^2 + (2^k b)^2 + (2^k c)^2 + (2^k d)^2 である．
-;   2. a <= b <= c <= d に固定して，同じ組の並べ替えを何度も調べない．
-;
-; 使用する番地:
-;   1: n
-;   2: m = nから4の因子を取り除いた値
-;   3: scale = 2^k
-;   4: q
-;   5: rem
-;   6: a
-;   7: b
-;   8: c
-;   9: d
-;   10: a2
-;   11: b2
-;   12: c2
-;   13: d2
-;   14: sum
-;   15: tmp
-;   16: out
+;  正の整数nが与えられたとき，a2 + b2 + c2 + d2 = nとなる
+; 非負の整数の組a, b, c, d を１つなるべく少ないステップ数で
+; 計算して出力するRAMのプログラムを書け．
+; このようなa, b, c, dは必ず存在する（ラグランジュの定理）．
+; nはr1に与えられるとする． 
+; レジスタの使い方
+; - r1: n
+; - r2: a
+; - r3: b
+; - r4: c
+; - r5: d
+; - r6: n1 = n - a * a, ループの管理変数群
+; - r7: n2 = n1 - b * b
+; - r8: n3 = n2 - c * c
+; - r9以降: 適当
+
+; memo
+; RAMで二乗を計算するには
 
 start:
-	LOAD 1
-	STORE 2
-	LOAD =1
-	STORE 3
-
-remove_factor_4:
-	; q = m / 4
-	LOAD 2
-	DIV =4
-	STORE 4
-
-	; rem = m - 4q
-	LOAD 4
-	MULT =4
-	STORE 15
-	LOAD 2
-	SUB 15
-	STORE 5
-	JZERO divide_by_4
-	JUMP search_start
-
-divide_by_4:
-	; m = m / 4, scale = scale * 2
-	LOAD 4
-	STORE 2
-	LOAD 3
-	MULT =2
-	STORE 3
-	JUMP remove_factor_4
-
-search_start:
-	LOAD =0
-	STORE 6
-	STORE 10
-
+    LOAD =0
+    STORE 2
 loop_a:
-	LOAD 10
-	SUB 2
-	JGTZ end
-
-	; bはaから始める．
-	LOAD 6
-	STORE 7
-	LOAD 10
-	STORE 11
-
+    ; if (a*a <= n), ループ継続
+    ; なので， (a*a > n) ならループ終了
+    LOAD 2
+    MULT 2 ; r0 = a * a
+    STORE 9 ; r9 = a^2
+    SUB 1 ; r0 = a^2 - n
+    JGTZ not_found
+    ; n1 = n - a*a
+    LOAD 1 ; nをロード
+    SUB 9 ; r0 = n - a^2
+    STORE 6 ; r6 = n1
+    ; bのループ
+    ; まずはb=aから始める
+    LOAD 2 ; r0 = a
+    STORE 3 ; r3 = b
 loop_b:
-	LOAD 10
-	ADD 11
-	STORE 14
-	SUB 2
-	JGTZ next_a
-
-	; cはbから始める．
-	LOAD 7
-	STORE 8
-	LOAD 11
-	STORE 12
-
+    ; if (b*b <= n1), ループ継続
+    ; なので， (b*b > n1) ならループ終了
+    LOAD 3 ; r0 = b
+    MULT 3 ; r0 = b * b
+    STORE 9 ; r9 = b^2
+    SUB 6 ; r0 = b^2 - n1
+    JGTZ next_a ; b*b > n1 なら次のbへ
+    ; n2 = n1 - b*b
+    LOAD 6 ; r0 = n1
+    SUB 9 ; r0 = n1 - b^2
+    STORE 7 ; r7 = n2
+    ; cのループ
+    ; まずはc=bから始める
+    LOAD 3 ; r0 = b
+    STORE 4 ; r4 = c
 loop_c:
-	LOAD 10
-	ADD 11
-	ADD 12
-	STORE 14
-	SUB 2
-	JGTZ next_b
-
-	; dはcから始める．
-	LOAD 8
-	STORE 9
-	LOAD 12
-	STORE 13
-
+    ; if (c*c <= n2), ループ継続
+    ; なので， (c*c > n2) ならループ終了
+    LOAD 4 ; r0 = c
+    MULT 4 ; r0 = c * c
+    STORE 9 ; r9 = c^2
+    SUB 7 ; r0 = c^2 - n2
+    JGTZ next_b ; c*c > n2 なら次のcへ
+    ; n3 = n2 - c*c
+    LOAD 7 ; r0 = n2
+    SUB 9 ; r0 = n2 - c^2
+    STORE 8 ; r8 = n3
+    ; dのループ
+    ; まずはd=cから始める
+    LOAD 4 ; r0 = c
+    STORE 5 ; r5 = d
 loop_d:
-	LOAD 10
-	ADD 11
-	ADD 12
-	ADD 13
-	STORE 14
-	SUB 2
-	JZERO found
-	JGTZ next_c
-
-	LOAD 9
-	ADD =1
-	STORE 9
-	MULT 9
-	STORE 13
-	JUMP loop_d
-
+    ; if (d*d <= n3), ループ継続
+    ; なので， (d*d > n3) ならループ終了
+    LOAD 5 ; r0 = d
+    MULT 5 ; r0 = d * d
+    STORE 9 ; r9 = d^2
+    SUB 8 ; r0 = n3 - d^2
+    JGTZ next_c ; d*d > n3 なら次のcへ
+    ; 見つかった場合
+    JZERO found ; n3 - d^2 == 0 なら見つかった
+    ; d++ してループ継続
+    LOAD 5 ; r0 = d
+    ADD =1 ; r0 = d + 1
+    STORE 5 ; r5 = d + 1
+    JUMP loop_d
+next_c: ; 次のcに進む c++
+    LOAD 4 ; r0 = c
+    ADD =1 ; r0 = c + 1
+    STORE 4 ; r4 = c + 1
+    JUMP loop_c
+next_b: ; 次のbに進む b++
+    LOAD 3 ; r0 = b
+    ADD =1 ; r0 = b + 1
+    STORE 3 ; r3 = b + 1
+    JUMP loop_b
+next_a: ; 次のaに進む a++
+    LOAD 2 ; r0 = a
+    ADD =1 ; r0 = a + 1
+    STORE 2 ; r2 = a + 1
+    JUMP loop_a
 found:
-	LOAD 6
-	MULT 3
-	STORE 16
-	WRITE 16
+    WRITE 2
+    WRITE 3
+    WRITE 4
+    WRITE 5
+    HALT
+not_found: ; 見つからなかったときのケース． 定理上，必ず見つかるはずなので，ここには来ないはず．
+    WRITE =99 ; 異常を示すために適当な出力
+    HALT
 
-	LOAD 7
-	MULT 3
-	STORE 16
-	WRITE 16
 
-	LOAD 8
-	MULT 3
-	STORE 16
-	WRITE 16
-
-	LOAD 9
-	MULT 3
-	STORE 16
-	WRITE 16
-	JUMP end
-
-next_c:
-	LOAD 8
-	ADD =1
-	STORE 8
-	MULT 8
-	STORE 12
-	JUMP loop_c
-
-next_b:
-	LOAD 7
-	ADD =1
-	STORE 7
-	MULT 7
-	STORE 11
-	JUMP loop_b
-
-next_a:
-	LOAD 6
-	ADD =1
-	STORE 6
-	MULT 6
-	STORE 10
-	JUMP loop_a
-
-end:
-	HALT

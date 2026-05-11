@@ -18,6 +18,11 @@ workspace = false
 command = "cargo"
 args = ["run", "--", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg", ]
 
+[tasks.debug-p1-2]
+workspace = false
+command = "cargo"
+args = ["run", "--", "debug", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg" ]   
+
 [tasks.p1-3]
 workspace = false
 command = "cargo"
