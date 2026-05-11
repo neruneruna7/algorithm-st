@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use ram_syntax::ast::{Instruction, Operand};
+use ram_syntax::ast::{Instruction, InstructionNode, Operand};
 use ram_syntax::lexer::{Opcode, Span};
 use ram_syntax::resolver::{self, ResolvedProgram};
 
@@ -31,6 +31,19 @@ pub struct RunResult {
     pub registers: Vec<Word>,
     pub output: Vec<Word>,
     pub steps: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepOutcome {
+    Executed(ExecutedInstruction),
+    Halted(ExecutedInstruction),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutedInstruction {
+    pub pc: usize,
+    pub span: Span,
+    pub instruction: String,
 }
 
 #[derive(Debug)]
@@ -177,62 +190,9 @@ impl Interpreter {
 
     pub fn run(mut self) -> Result<RunResult, Error> {
         loop {
-            if self.steps >= self.max_steps {
-                return Err(Error::StepLimitExceeded {
-                    max_steps: self.max_steps,
-                });
+            if matches!(self.step()?, StepOutcome::Halted(_)) {
+                break;
             }
-
-            let Some(node) = self.program.instructions.get(self.pc) else {
-                return Err(Error::ProgramCounterOutOfBounds { pc: self.pc });
-            };
-            let span = node.span.clone();
-            let instruction = node.instruction.clone();
-            self.steps += 1;
-
-            match &instruction {
-                Instruction::Unary { opcode, operand } => self
-                    .execute_unary(opcode.clone(), operand)
-                    .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?,
-                Instruction::Jump { opcode, label } => {
-                    let target = self.program.labels[&label.name].address;
-                    match opcode {
-                        Opcode::Jump => {
-                            self.pc = target;
-                            continue;
-                        }
-                        Opcode::Jzero if self.read_register(0) == 0 => {
-                            self.pc = target;
-                            continue;
-                        }
-                        Opcode::Jgtz if self.read_register(0) > 0 => {
-                            self.pc = target;
-                            continue;
-                        }
-                        Opcode::Jzero | Opcode::Jgtz => {}
-                        _ => unreachable!("parser only creates jump instructions for jump opcodes"),
-                    }
-                }
-                Instruction::Halt => break,
-                Instruction::Sj { lhs, rhs, label } => {
-                    let rhs_value = self.read_operand(rhs).map_err(|error| {
-                        error.with_runtime_context(self.pc, span.clone(), &instruction)
-                    })?;
-                    let lhs_value = self.read_operand(lhs).map_err(|error| {
-                        error.with_runtime_context(self.pc, span.clone(), &instruction)
-                    })?;
-                    let next_value = lhs_value.wrapping_sub(rhs_value);
-                    self.write_operand(lhs, next_value)
-                        .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?;
-
-                    if next_value == 0 {
-                        self.pc = self.program.labels[&label.name].address;
-                        continue;
-                    }
-                }
-            }
-
-            self.pc += 1;
         }
 
         Ok(RunResult {
@@ -240,6 +200,96 @@ impl Interpreter {
             output: self.output,
             steps: self.steps,
         })
+    }
+
+    pub fn step(&mut self) -> Result<StepOutcome, Error> {
+        if self.steps >= self.max_steps {
+            return Err(Error::StepLimitExceeded {
+                max_steps: self.max_steps,
+            });
+        }
+
+        let Some(node) = self.program.instructions.get(self.pc) else {
+            return Err(Error::ProgramCounterOutOfBounds { pc: self.pc });
+        };
+        let span = node.span.clone();
+        let instruction = node.instruction.clone();
+        let executed = ExecutedInstruction {
+            pc: self.pc,
+            span: span.clone(),
+            instruction: format_instruction(&instruction),
+        };
+        self.steps += 1;
+
+        match &instruction {
+            Instruction::Unary { opcode, operand } => {
+                self.execute_unary(opcode.clone(), operand)
+                    .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?
+            }
+            Instruction::Jump { opcode, label } => {
+                let target = self.program.labels[&label.name].address;
+                match opcode {
+                    Opcode::Jump => {
+                        self.pc = target;
+                        return Ok(StepOutcome::Executed(executed));
+                    }
+                    Opcode::Jzero if self.read_register(0) == 0 => {
+                        self.pc = target;
+                        return Ok(StepOutcome::Executed(executed));
+                    }
+                    Opcode::Jgtz if self.read_register(0) > 0 => {
+                        self.pc = target;
+                        return Ok(StepOutcome::Executed(executed));
+                    }
+                    Opcode::Jzero | Opcode::Jgtz => {}
+                    _ => unreachable!("parser only creates jump instructions for jump opcodes"),
+                }
+            }
+            Instruction::Halt => return Ok(StepOutcome::Halted(executed)),
+            Instruction::Sj { lhs, rhs, label } => {
+                let rhs_value = self.read_operand(rhs).map_err(|error| {
+                    error.with_runtime_context(self.pc, span.clone(), &instruction)
+                })?;
+                let lhs_value = self.read_operand(lhs).map_err(|error| {
+                    error.with_runtime_context(self.pc, span.clone(), &instruction)
+                })?;
+                let next_value = lhs_value.wrapping_sub(rhs_value);
+                self.write_operand(lhs, next_value)
+                    .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?;
+
+                if next_value == 0 {
+                    self.pc = self.program.labels[&label.name].address;
+                    return Ok(StepOutcome::Executed(executed));
+                }
+            }
+        }
+
+        self.pc += 1;
+        Ok(StepOutcome::Executed(executed))
+    }
+
+    pub fn current_instruction(&self) -> Option<&InstructionNode> {
+        self.program.instructions.get(self.pc)
+    }
+
+    pub fn pc(&self) -> usize {
+        self.pc
+    }
+
+    pub fn steps(&self) -> usize {
+        self.steps
+    }
+
+    pub fn registers(&self) -> &[Word] {
+        &self.registers
+    }
+
+    pub fn output(&self) -> &[Word] {
+        &self.output
+    }
+
+    pub fn input_cursor(&self) -> usize {
+        self.input_cursor
     }
 
     fn execute_unary(&mut self, opcode: Opcode, operand: &Operand) -> Result<(), Error> {
@@ -344,6 +394,19 @@ pub fn run_file(path: impl AsRef<Path>, config: RunConfig) -> Result<RunResult, 
     run_source(&source, config)
 }
 
+pub fn interpreter_from_source(source: &str, config: RunConfig) -> Result<Interpreter, Error> {
+    let program = resolver::resolve_source(source)?;
+    Interpreter::new(program, config)
+}
+
+pub fn interpreter_from_file(
+    path: impl AsRef<Path>,
+    config: RunConfig,
+) -> Result<Interpreter, Error> {
+    let source = fs::read_to_string(path)?;
+    interpreter_from_source(&source, config)
+}
+
 pub fn read_input_file(path: impl AsRef<Path>) -> Result<Vec<Word>, Error> {
     fs::read_to_string(path)?
         .split_whitespace()
@@ -400,6 +463,10 @@ fn format_instruction(instruction: &Instruction) -> String {
             label.name
         ),
     }
+}
+
+pub fn format_instruction_for_display(instruction: &Instruction) -> String {
+    format_instruction(instruction)
 }
 
 fn format_opcode(opcode: &Opcode) -> &'static str {
@@ -521,6 +588,26 @@ mod tests {
         assert!(message.contains("line 2, column 1"));
         assert!(message.contains("`DIV =0`"));
         assert!(message.contains("division by zero"));
+    }
+
+    #[test]
+    fn interpreter_steps_one_instruction_at_a_time() {
+        let mut interpreter =
+            interpreter_from_source("LOAD =2\nADD =3\nHALT\n", RunConfig::default()).unwrap();
+
+        let first = interpreter.step().unwrap();
+        assert!(matches!(first, StepOutcome::Executed(_)));
+        assert_eq!(interpreter.registers()[0], 2);
+        assert_eq!(interpreter.pc(), 1);
+
+        let second = interpreter.step().unwrap();
+        assert!(matches!(second, StepOutcome::Executed(_)));
+        assert_eq!(interpreter.registers()[0], 5);
+        assert_eq!(interpreter.pc(), 2);
+
+        let third = interpreter.step().unwrap();
+        assert!(matches!(third, StepOutcome::Halted(_)));
+        assert_eq!(interpreter.steps(), 3);
     }
 
     #[test]
