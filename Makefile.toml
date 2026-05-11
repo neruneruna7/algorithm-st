@@ -11,3 +11,9 @@ description = "p1-1: バブルソートアルゴリズムによって小さい�
 workspace = false
 command = "cargo"
 args = ["run", "--", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg", ]
+
+[tasks.p1-2]
+description = "p1-2: 与えられた正の整数nを4つの平方数の和として表すRAMのプログラム"
+workspace = false
+command = "cargo"
+args = ["run", "--", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg", ]

@@ -1,0 +1,167 @@
+; - 1番地に正の整数nが与えられている．
+; - a^2 + b^2 + c^2 + d^2 = n となる非負整数a,b,c,dをWRITEで出力する．
+;
+; 使う工夫:
+;   1. 先にnから4の因子を取り除く．
+;      n = 4^k m の形にして，まずmの解を探す．
+;      m = a^2 + b^2 + c^2 + d^2 なら，
+;      n = (2^k a)^2 + (2^k b)^2 + (2^k c)^2 + (2^k d)^2 である．
+;   2. a <= b <= c <= d に固定して，同じ組の並べ替えを何度も調べない．
+;
+; 使用する番地:
+;   1: n
+;   2: m = nから4の因子を取り除いた値
+;   3: scale = 2^k
+;   4: q
+;   5: rem
+;   6: a
+;   7: b
+;   8: c
+;   9: d
+;   10: a2
+;   11: b2
+;   12: c2
+;   13: d2
+;   14: sum
+;   15: tmp
+;   16: out
+
+start:
+	LOAD 1
+	STORE 2
+	LOAD =1
+	STORE 3
+
+remove_factor_4:
+	; q = m / 4
+	LOAD 2
+	DIV =4
+	STORE 4
+
+	; rem = m - 4q
+	LOAD 4
+	MULT =4
+	STORE 15
+	LOAD 2
+	SUB 15
+	STORE 5
+	JZERO divide_by_4
+	JUMP search_start
+
+divide_by_4:
+	; m = m / 4, scale = scale * 2
+	LOAD 4
+	STORE 2
+	LOAD 3
+	MULT =2
+	STORE 3
+	JUMP remove_factor_4
+
+search_start:
+	LOAD =0
+	STORE 6
+	STORE 10
+
+loop_a:
+	LOAD 10
+	SUB 2
+	JGTZ end
+
+	; bはaから始める．
+	LOAD 6
+	STORE 7
+	LOAD 10
+	STORE 11
+
+loop_b:
+	LOAD 10
+	ADD 11
+	STORE 14
+	SUB 2
+	JGTZ next_a
+
+	; cはbから始める．
+	LOAD 7
+	STORE 8
+	LOAD 11
+	STORE 12
+
+loop_c:
+	LOAD 10
+	ADD 11
+	ADD 12
+	STORE 14
+	SUB 2
+	JGTZ next_b
+
+	; dはcから始める．
+	LOAD 8
+	STORE 9
+	LOAD 12
+	STORE 13
+
+loop_d:
+	LOAD 10
+	ADD 11
+	ADD 12
+	ADD 13
+	STORE 14
+	SUB 2
+	JZERO found
+	JGTZ next_c
+
+	LOAD 9
+	ADD =1
+	STORE 9
+	MULT 9
+	STORE 13
+	JUMP loop_d
+
+found:
+	LOAD 6
+	MULT 3
+	STORE 16
+	WRITE 16
+
+	LOAD 7
+	MULT 3
+	STORE 16
+	WRITE 16
+
+	LOAD 8
+	MULT 3
+	STORE 16
+	WRITE 16
+
+	LOAD 9
+	MULT 3
+	STORE 16
+	WRITE 16
+	JUMP end
+
+next_c:
+	LOAD 8
+	ADD =1
+	STORE 8
+	MULT 8
+	STORE 12
+	JUMP loop_c
+
+next_b:
+	LOAD 7
+	ADD =1
+	STORE 7
+	MULT 7
+	STORE 11
+	JUMP loop_b
+
+next_a:
+	LOAD 6
+	ADD =1
+	STORE 6
+	MULT 6
+	STORE 10
+	JUMP loop_a
+
+end:
+	HALT

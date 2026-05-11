@@ -474,6 +474,71 @@ mod tests {
         }
     }
 
+    #[test]
+    fn assignment_p1_2_outputs_four_squares_for_initial_register_value() {
+        let initial_registers = read_init_register_file("assignment/p1-2.reg").unwrap();
+        let n = initial_registers
+            .iter()
+            .find_map(|(address, value)| (*address == 1).then_some(*value))
+            .unwrap();
+        let result = run_file(
+            "assignment/p1-2.ram",
+            RunConfig {
+                initial_registers,
+                max_steps: 1_000_000,
+                ..RunConfig::default()
+            },
+        )
+        .unwrap();
+
+        assert_four_square_output(n, &result.output);
+    }
+
+    #[test]
+    fn assignment_p1_2_outputs_four_squares_for_random_inputs() {
+        const CASES: usize = 300;
+        const MAX_N: Word = 1_000;
+
+        let source = std::fs::read_to_string("assignment/p1-2.ram").unwrap();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(43);
+
+        for case_index in 0..CASES {
+            let n = random_word_inclusive(&mut rng, 1, MAX_N);
+            let result = run_source(
+                &source,
+                RunConfig {
+                    initial_registers: vec![(1, n)],
+                    max_steps: 1_000_000,
+                    ..RunConfig::default()
+                },
+            )
+            .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
+
+            assert_eq!(
+                result.output.len(),
+                4,
+                "case {case_index} failed: n = {n}, output = {:?}",
+                result.output
+            );
+            assert_four_square_output(n, &result.output);
+        }
+    }
+
+    fn assert_four_square_output(n: Word, output: &[Word]) {
+        assert_eq!(output.len(), 4, "output = {output:?}");
+        assert!(
+            output.iter().all(|value| *value >= 0),
+            "output contains a negative value: {output:?}"
+        );
+        assert!(
+            output.windows(2).all(|pair| pair[0] <= pair[1]),
+            "output is not sorted: {output:?}"
+        );
+
+        let sum = output.iter().map(|value| value * value).sum::<Word>();
+        assert_eq!(sum, n, "output = {output:?}");
+    }
+
     fn random_usize_inclusive(rng: &mut Xoshiro256PlusPlus, max: usize) -> usize {
         (rng.next_u64() % (max as u64 + 1)) as usize
     }
