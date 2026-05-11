@@ -11,35 +11,7 @@
 ;   6: addr_j1 = 21 + j
 ;   7: tmp_j = M[addr_j]
 ;   8: tmp_j1 = M[addr_j1]
-;   9: k
-;  10: init_addr
-
 start:
-	; 動作検証用の初期化．
-	; n = 10 とし，20番地から29番地までに 10, 9, ..., 1 を入れる．
-	LOAD =10
-	STORE 1
-	LOAD =0
-	STORE 9
-
-init_loop:
-	LOAD 9
-	SUB 1
-	JZERO init_end
-
-	LOAD 9
-	ADD =20
-	STORE 10
-	LOAD 1
-	SUB 9
-	STORE *10
-
-	LOAD 9
-	ADD =1
-	STORE 9
-	JUMP init_loop
-
-init_end:
 	; n <= 1 なら並べ替える必要はない．
 	LOAD 1
 	SUB =1

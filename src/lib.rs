@@ -324,6 +324,9 @@ fn to_address(address: Word) -> Result<usize, Error> {
 mod tests {
     use super::*;
 
+    use rand::rngs::Xoshiro256PlusPlus;
+    use rand::{Rng, SeedableRng};
+
     #[test]
     fn runs_arithmetic_and_write() {
         let result = run_source(
@@ -399,5 +402,83 @@ mod tests {
         std::fs::remove_file(path).unwrap();
 
         assert_eq!(registers, vec![(1, 10), (2, -3), (3, 0)]);
+    }
+
+    #[test]
+    fn assignment_p1_1_sorts_initial_register_values() {
+        let initial_registers = read_init_register_file("assignment/p1-1.reg").unwrap();
+        let result = run_file(
+            "assignment/p1-1.ram",
+            RunConfig {
+                initial_registers,
+                ..RunConfig::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(&result.registers[20..24], &[1, 2, 3, 5]);
+    }
+
+    #[test]
+    fn assignment_p1_1_matches_rust_sort_with_random_inputs() {
+        const CASES: usize = 1_000;
+        const MAX_N: usize = 64;
+        const MIN_VALUE: Word = -10_000;
+        const MAX_VALUE: Word = 10_000;
+
+        let source = std::fs::read_to_string("assignment/p1-1.ram").unwrap();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(42);
+
+        for case_index in 0..CASES {
+            let n = random_usize_inclusive(&mut rng, MAX_N);
+            let values = (0..n)
+                .map(|_| random_word_inclusive(&mut rng, MIN_VALUE, MAX_VALUE))
+                .collect::<Vec<_>>();
+
+            let mut expected = values.clone();
+            expected.sort();
+
+            let initial_registers = std::iter::once((1, n as Word))
+                .chain(
+                    values
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .map(|(index, value)| (20 + index, value)),
+                )
+                .collect();
+            let result = run_source(
+                &source,
+                RunConfig {
+                    initial_registers,
+                    max_steps: 200_000,
+                    ..RunConfig::default()
+                },
+            )
+            .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
+            let actual = (0..n)
+                .map(|index| {
+                    result
+                        .registers
+                        .get(20 + index)
+                        .copied()
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                actual, expected,
+                "case {case_index} failed: input = {values:?}"
+            );
+        }
+    }
+
+    fn random_usize_inclusive(rng: &mut Xoshiro256PlusPlus, max: usize) -> usize {
+        (rng.next_u64() % (max as u64 + 1)) as usize
+    }
+
+    fn random_word_inclusive(rng: &mut Xoshiro256PlusPlus, min: Word, max: Word) -> Word {
+        let span = i64::from(max) - i64::from(min) + 1;
+        min + (rng.next_u64() % span as u64) as Word
     }
 }
