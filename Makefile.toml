@@ -17,3 +17,8 @@ description = "p1-2: 与えられた正の整数nを4つの平方数の和とし
 workspace = false
 command = "cargo"
 args = ["run", "--", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg", ]
+
+[tasks.p1-3]
+workspace = false
+command = "cargo"
+args = ["run", "--", "assignment/p1-3.ram", "--init-register", "assignment/p1-3.reg", ]

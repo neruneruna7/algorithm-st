@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use ram_syntax::ast::{Instruction, Operand};
-use ram_syntax::lexer::Opcode;
+use ram_syntax::lexer::{Opcode, Span};
 use ram_syntax::resolver::{self, ResolvedProgram};
 
 pub type Word = i32;
@@ -37,14 +37,31 @@ pub struct RunResult {
 pub enum Error {
     ParseOrResolve(resolver::ResolveSourceError),
     Io(std::io::Error),
-    InvalidInputValue { value: String },
-    InvalidInitRegisterValue { line: usize, value: String },
-    InvalidAddress { address: Word },
+    InvalidInputValue {
+        value: String,
+    },
+    InvalidInitRegisterValue {
+        line: usize,
+        value: String,
+    },
+    InvalidAddress {
+        address: Word,
+    },
     ImmediateWrite,
     DivisionByZero,
     InputExhausted,
-    StepLimitExceeded { max_steps: usize },
-    ProgramCounterOutOfBounds { pc: usize },
+    StepLimitExceeded {
+        max_steps: usize,
+    },
+    ProgramCounterOutOfBounds {
+        pc: usize,
+    },
+    Runtime {
+        pc: usize,
+        span: Span,
+        instruction: String,
+        source: Box<Error>,
+    },
 }
 
 impl fmt::Display for Error {
@@ -68,11 +85,51 @@ impl fmt::Display for Error {
             Self::ProgramCounterOutOfBounds { pc } => {
                 write!(f, "program counter out of bounds: {pc}")
             }
+            Self::Runtime {
+                pc,
+                span,
+                instruction,
+                source,
+            } => write!(
+                f,
+                "runtime error at pc {pc}, {span}, while executing `{instruction}`: {source}"
+            ),
         }
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Runtime { source, .. } => Some(source),
+            Self::Io(error) => Some(error),
+            Self::ParseOrResolve(error) => Some(error),
+            Self::InvalidInputValue { .. }
+            | Self::InvalidInitRegisterValue { .. }
+            | Self::InvalidAddress { .. }
+            | Self::ImmediateWrite
+            | Self::DivisionByZero
+            | Self::InputExhausted
+            | Self::StepLimitExceeded { .. }
+            | Self::ProgramCounterOutOfBounds { .. } => None,
+        }
+    }
+}
+
+impl Error {
+    fn with_runtime_context(self, pc: usize, span: Span, instruction: &Instruction) -> Self {
+        if matches!(self, Self::Runtime { .. }) {
+            return self;
+        }
+
+        Self::Runtime {
+            pc,
+            span,
+            instruction: format_instruction(instruction),
+            source: Box::new(self),
+        }
+    }
+}
 
 impl From<resolver::ResolveSourceError> for Error {
     fn from(error: resolver::ResolveSourceError) -> Self {
@@ -129,11 +186,14 @@ impl Interpreter {
             let Some(node) = self.program.instructions.get(self.pc) else {
                 return Err(Error::ProgramCounterOutOfBounds { pc: self.pc });
             };
+            let span = node.span.clone();
             let instruction = node.instruction.clone();
             self.steps += 1;
 
-            match instruction {
-                Instruction::Unary { opcode, operand } => self.execute_unary(opcode, &operand)?,
+            match &instruction {
+                Instruction::Unary { opcode, operand } => self
+                    .execute_unary(opcode.clone(), operand)
+                    .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?,
                 Instruction::Jump { opcode, label } => {
                     let target = self.program.labels[&label.name].address;
                     match opcode {
@@ -155,10 +215,15 @@ impl Interpreter {
                 }
                 Instruction::Halt => break,
                 Instruction::Sj { lhs, rhs, label } => {
-                    let rhs_value = self.read_operand(&rhs)?;
-                    let lhs_value = self.read_operand(&lhs)?;
+                    let rhs_value = self.read_operand(rhs).map_err(|error| {
+                        error.with_runtime_context(self.pc, span.clone(), &instruction)
+                    })?;
+                    let lhs_value = self.read_operand(lhs).map_err(|error| {
+                        error.with_runtime_context(self.pc, span.clone(), &instruction)
+                    })?;
                     let next_value = lhs_value.wrapping_sub(rhs_value);
-                    self.write_operand(&lhs, next_value)?;
+                    self.write_operand(lhs, next_value)
+                        .map_err(|error| error.with_runtime_context(self.pc, span, &instruction))?;
 
                     if next_value == 0 {
                         self.pc = self.program.labels[&label.name].address;
@@ -321,6 +386,48 @@ fn to_address(address: Word) -> Result<usize, Error> {
     usize::try_from(address).map_err(|_| Error::InvalidAddress { address })
 }
 
+fn format_instruction(instruction: &Instruction) -> String {
+    match instruction {
+        Instruction::Unary { opcode, operand } => {
+            format!("{} {}", format_opcode(opcode), format_operand(operand))
+        }
+        Instruction::Jump { opcode, label } => format!("{} {}", format_opcode(opcode), label.name),
+        Instruction::Halt => "HALT".to_string(),
+        Instruction::Sj { lhs, rhs, label } => format!(
+            "SJ {},{},{}",
+            format_operand(lhs),
+            format_operand(rhs),
+            label.name
+        ),
+    }
+}
+
+fn format_opcode(opcode: &Opcode) -> &'static str {
+    match opcode {
+        Opcode::Load => "LOAD",
+        Opcode::Store => "STORE",
+        Opcode::Add => "ADD",
+        Opcode::Sub => "SUB",
+        Opcode::Mult => "MULT",
+        Opcode::Div => "DIV",
+        Opcode::Jump => "JUMP",
+        Opcode::Jzero => "JZERO",
+        Opcode::Jgtz => "JGTZ",
+        Opcode::Read => "READ",
+        Opcode::Write => "WRITE",
+        Opcode::Halt => "HALT",
+        Opcode::Sj => "SJ",
+    }
+}
+
+fn format_operand(operand: &Operand) -> String {
+    match operand {
+        Operand::Direct(address) => address.to_string(),
+        Operand::Indirect(address) => format!("*{address}"),
+        Operand::Immediate(value) => format!("={value}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +510,17 @@ mod tests {
         std::fs::remove_file(path).unwrap();
 
         assert_eq!(registers, vec![(1, 10), (2, -3), (3, 0)]);
+    }
+
+    #[test]
+    fn runtime_errors_include_instruction_context() {
+        let error = run_source("LOAD =1\nDIV =0\nHALT\n", RunConfig::default()).unwrap_err();
+        let message = error.to_string();
+
+        assert!(message.contains("runtime error at pc 1"));
+        assert!(message.contains("line 2, column 1"));
+        assert!(message.contains("`DIV =0`"));
+        assert!(message.contains("division by zero"));
     }
 
     #[test]
@@ -524,6 +642,74 @@ mod tests {
         }
     }
 
+    #[test]
+    fn assignment_p1_3_computes_factorial_for_initial_register_value() {
+        let initial_registers = read_init_register_file("assignment/p1-3.reg").unwrap();
+        let n = initial_registers
+            .iter()
+            .find_map(|(address, value)| (*address == 1).then_some(*value))
+            .unwrap();
+        let result = run_file(
+            "assignment/p1-3.ram",
+            RunConfig {
+                initial_registers,
+                max_steps: 5_000_000,
+                ..RunConfig::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.registers[1], n);
+        assert_eq!(result.registers[2], factorial(n));
+    }
+
+    #[test]
+    fn assignment_p1_3_computes_factorial_for_random_inputs() {
+        const CASES: usize = 100;
+        const MAX_N: Word = 7;
+
+        let source = std::fs::read_to_string("assignment/p1-3.ram").unwrap();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(44);
+
+        for case_index in 0..CASES {
+            let n = random_word_inclusive(&mut rng, 1, MAX_N);
+            let result = run_source(
+                &source,
+                RunConfig {
+                    initial_registers: vec![(1, n)],
+                    max_steps: 5_000_000,
+                    ..RunConfig::default()
+                },
+            )
+            .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
+
+            assert_eq!(result.registers[1], n, "case {case_index} failed");
+            assert_eq!(
+                result.registers[2],
+                factorial(n),
+                "case {case_index} failed"
+            );
+        }
+    }
+
+    #[test]
+    fn assignment_p1_3_uses_only_sj_and_halt_instructions() {
+        let source = std::fs::read_to_string("assignment/p1-3.ram").unwrap();
+
+        for (line_index, line) in source.lines().enumerate() {
+            let line = line.split(';').next().unwrap_or_default().trim();
+            if line.is_empty() || line.ends_with(':') {
+                continue;
+            }
+
+            assert!(
+                line.starts_with("SJ ") || line == "HALT",
+                "line {} uses a non-SJ instruction: {line}",
+                line_index + 1
+            );
+        }
+    }
+
     fn assert_four_square_output(n: Word, output: &[Word]) {
         assert_eq!(output.len(), 4, "output = {output:?}");
         assert!(
@@ -537,6 +723,10 @@ mod tests {
 
         let sum = output.iter().map(|value| value * value).sum::<Word>();
         assert_eq!(sum, n, "output = {output:?}");
+    }
+
+    fn factorial(n: Word) -> Word {
+        (1..=n).product()
     }
 
     fn random_usize_inclusive(rng: &mut Xoshiro256PlusPlus, max: usize) -> usize {
