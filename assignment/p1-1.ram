@@ -1,87 +1,111 @@
-; - 1番地にnが与えられている
-; - 20番地からn + 19番地までにn個の整数が与えられている
-; - バブルソートアルゴリズムによって小さい方から大きい方へn個の数を並べ替えるRAMのプログラム．
-;
-; 使用する番地:
-;   1: n
-;   2: i
-;   3: j
-;   4: limit = n - 1 - i
-;   5: addr_j = 20 + j
-;   6: addr_j1 = 21 + j
-;   7: tmp_j = M[addr_j]
-;   8: tmp_j1 = M[addr_j1]
+;  正の整数nが与えられたとき，a2 + b2 + c2 + d2 = nとなる
+; 非負の整数の組a, b, c, d を１つなるべく少ないステップ数で
+; 計算して出力するRAMのプログラムを書け．
+; このようなa, b, c, dは必ず存在する（ラグランジュの定理）．
+; nはr1に与えられるとする． 
+; レジスタの使い方
+; - r1: n
+; - r2: a
+; - r3: b
+; - r4: c
+; - r5: d
+; - r6: n1 = n - a * a, ループの管理変数群
+; - r7: n2 = n1 - b * b
+; - r8: n3 = n2 - c * c
+; - r9以降: 適当
+
+; memo
+; RAMで二乗を計算するには
+
 start:
-	; n <= 1 なら並べ替える必要はない．
-	LOAD 1
-	SUB =1
-	JGTZ sort_start
-	JUMP end
+    LOAD =0
+    STORE 2
+loop_a:
+    ; if (a*a <= n), ループ継続
+    ; なので， (a*a > n) ならループ終了
+    LOAD 2
+    MULT 2 ; r0 = a * a
+    STORE 9 ; r9 = a^2
+    SUB 1 ; r0 = a^2 - n
+    JGTZ not_found
+    ; n1 = n - a*a
+    LOAD 1 ; nをロード
+    SUB 9 ; r0 = n - a^2
+    STORE 6 ; r6 = n1
+    ; bのループ
+    ; まずはb=aから始める
+    LOAD 2 ; r0 = a
+    STORE 3 ; r3 = b
+loop_b:
+    ; if (b*b <= n1), ループ継続
+    ; なので， (b*b > n1) ならループ終了
+    LOAD 3 ; r0 = b
+    MULT 3 ; r0 = b * b
+    STORE 9 ; r9 = b^2
+    SUB 6 ; r0 = b^2 - n1
+    JGTZ next_a ; b*b > n1 なら次のbへ
+    ; n2 = n1 - b*b
+    LOAD 6 ; r0 = n1
+    SUB 9 ; r0 = n1 - b^2
+    STORE 7 ; r7 = n2
+    ; cのループ
+    ; まずはc=bから始める
+    LOAD 3 ; r0 = b
+    STORE 4 ; r4 = c
+loop_c:
+    ; if (c*c <= n2), ループ継続
+    ; なので， (c*c > n2) ならループ終了
+    LOAD 4 ; r0 = c
+    MULT 4 ; r0 = c * c
+    STORE 9 ; r9 = c^2
+    SUB 7 ; r0 = c^2 - n2
+    JGTZ next_b ; c*c > n2 なら次のcへ
+    ; n3 = n2 - c*c
+    LOAD 7 ; r0 = n2
+    SUB 9 ; r0 = n2 - c^2
+    STORE 8 ; r8 = n3
+    ; dのループ
+    ; まずはd=cから始める
+    LOAD 4 ; r0 = c
+    STORE 5 ; r5 = d
+loop_d:
+    ; if (d*d <= n3), ループ継続
+    ; なので， (d*d > n3) ならループ終了
+    LOAD 5 ; r0 = d
+    MULT 5 ; r0 = d * d
+    STORE 9 ; r9 = d^2
+    SUB 8 ; r0 = n3 - d^2
+    JGTZ next_c ; d*d > n3 なら次のcへ
+    ; 見つかった場合
+    JZERO found ; n3 - d^2 == 0 なら見つかった
+    ; d++ してループ継続
+    LOAD 5 ; r0 = d
+    ADD =1 ; r0 = d + 1
+    STORE 5 ; r5 = d + 1
+    JUMP loop_d
+next_c: ; 次のcに進む c++
+    LOAD 4 ; r0 = c
+    ADD =1 ; r0 = c + 1
+    STORE 4 ; r4 = c + 1
+    JUMP loop_c
+next_b: ; 次のbに進む b++
+    LOAD 3 ; r0 = b
+    ADD =1 ; r0 = b + 1
+    STORE 3 ; r3 = b + 1
+    JUMP loop_b
+next_a: ; 次のaに進む a++
+    LOAD 2 ; r0 = a
+    ADD =1 ; r0 = a + 1
+    STORE 2 ; r2 = a + 1
+    JUMP loop_a
+found:
+    WRITE 2
+    WRITE 3
+    WRITE 4
+    WRITE 5
+    HALT
+not_found: ; 見つからなかったときのケース． 定理上，必ず見つかるはずなので，ここには来ないはず．
+    WRITE =99 ; 異常を示すために適当な出力
+    HALT
 
-sort_start:
-	LOAD =0
-	STORE 2
 
-loop_i:
-	; i == n - 1 なら外側のループを終了する．
-	LOAD 1
-	SUB =1
-	STORE 4
-	LOAD 2
-	SUB 4
-	JZERO end
-
-	; limit = n - 1 - i
-	LOAD 1
-	SUB =1
-	SUB 2
-	STORE 4
-
-	LOAD =0
-	STORE 3
-
-loop_j:
-	; j == limit なら内側のループを終了する．
-	LOAD 3
-	SUB 4
-	JZERO loop_j_end
-
-	; addr_j = 20 + j, addr_j1 = addr_j + 1
-	LOAD 3
-	ADD =20
-	STORE 5
-	ADD =1
-	STORE 6
-
-	; tmp_j = M[addr_j], tmp_j1 = M[addr_j1]
-	LOAD *5
-	STORE 7
-	LOAD *6
-	STORE 8
-
-	; tmp_j > tmp_j1 なら交換する．
-	LOAD 7
-	SUB 8
-	JGTZ swap
-	JUMP no_swap
-
-swap:
-	LOAD 8
-	STORE *5
-	LOAD 7
-	STORE *6
-
-no_swap:
-	LOAD 3
-	ADD =1
-	STORE 3
-	JUMP loop_j
-
-loop_j_end:
-	LOAD 2
-	ADD =1
-	STORE 2
-	JUMP loop_i
-
-end:
-	HALT

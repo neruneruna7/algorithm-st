@@ -611,83 +611,14 @@ mod tests {
     }
 
     #[test]
-    fn assignment_p1_1_sorts_initial_register_values() {
+    fn assignment_p1_1_outputs_four_squares_for_initial_register_value() {
         let initial_registers = read_init_register_file("assignment/p1-1.reg").unwrap();
-        let result = run_file(
-            "assignment/p1-1.ram",
-            RunConfig {
-                initial_registers,
-                ..RunConfig::default()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(&result.registers[20..24], &[1, 2, 3, 5]);
-    }
-
-    #[test]
-    fn assignment_p1_1_matches_rust_sort_with_random_inputs() {
-        const CASES: usize = 1_000;
-        const MAX_N: usize = 64;
-        const MIN_VALUE: Word = -10_000;
-        const MAX_VALUE: Word = 10_000;
-
-        let source = std::fs::read_to_string("assignment/p1-1.ram").unwrap();
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(42);
-
-        for case_index in 0..CASES {
-            let n = random_usize_inclusive(&mut rng, MAX_N);
-            let values = (0..n)
-                .map(|_| random_word_inclusive(&mut rng, MIN_VALUE, MAX_VALUE))
-                .collect::<Vec<_>>();
-
-            let mut expected = values.clone();
-            expected.sort();
-
-            let initial_registers = std::iter::once((1, n as Word))
-                .chain(
-                    values
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .map(|(index, value)| (20 + index, value)),
-                )
-                .collect();
-            let result = run_source(
-                &source,
-                RunConfig {
-                    initial_registers,
-                    max_steps: 200_000,
-                    ..RunConfig::default()
-                },
-            )
-            .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
-            let actual = (0..n)
-                .map(|index| {
-                    result
-                        .registers
-                        .get(20 + index)
-                        .copied()
-                        .unwrap_or_default()
-                })
-                .collect::<Vec<_>>();
-
-            assert_eq!(
-                actual, expected,
-                "case {case_index} failed: input = {values:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn assignment_p1_2_outputs_four_squares_for_initial_register_value() {
-        let initial_registers = read_init_register_file("assignment/p1-2.reg").unwrap();
         let n = initial_registers
             .iter()
             .find_map(|(address, value)| (*address == 1).then_some(*value))
             .unwrap();
         let result = run_file(
-            "assignment/p1-2.ram",
+            "assignment/p1-1.ram",
             RunConfig {
                 initial_registers,
                 max_steps: 1_000_000,
@@ -700,11 +631,11 @@ mod tests {
     }
 
     #[test]
-    fn assignment_p1_2_outputs_four_squares_for_random_inputs() {
+    fn assignment_p1_1_outputs_four_squares_for_random_inputs() {
         const CASES: usize = 300;
         const MAX_N: Word = 1_000;
 
-        let source = std::fs::read_to_string("assignment/p1-2.ram").unwrap();
+        let source = std::fs::read_to_string("assignment/p1-1.ram").unwrap();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(43);
 
         for case_index in 0..CASES {
@@ -730,14 +661,14 @@ mod tests {
     }
 
     #[test]
-    fn assignment_p1_3_computes_factorial_for_initial_register_value() {
-        let initial_registers = read_init_register_file("assignment/p1-3.reg").unwrap();
+    fn assignment_p1_2_computes_factorial_for_initial_register_value() {
+        let initial_registers = read_init_register_file("assignment/p1-2.reg").unwrap();
         let n = initial_registers
             .iter()
             .find_map(|(address, value)| (*address == 1).then_some(*value))
             .unwrap();
         let result = run_file(
-            "assignment/p1-3.ram",
+            "assignment/p1-2.ram",
             RunConfig {
                 initial_registers,
                 max_steps: 5_000_000,
@@ -751,11 +682,11 @@ mod tests {
     }
 
     #[test]
-    fn assignment_p1_3_computes_factorial_for_random_inputs() {
+    fn assignment_p1_2_computes_factorial_for_random_inputs() {
         const CASES: usize = 100;
         const MAX_N: Word = 7;
 
-        let source = std::fs::read_to_string("assignment/p1-3.ram").unwrap();
+        let source = std::fs::read_to_string("assignment/p1-2.ram").unwrap();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(44);
 
         for case_index in 0..CASES {
@@ -784,8 +715,8 @@ mod tests {
     }
 
     #[test]
-    fn assignment_p1_3_uses_only_sj_write_and_halt_instructions() {
-        let source = std::fs::read_to_string("assignment/p1-3.ram").unwrap();
+    fn assignment_p1_2_uses_only_sj_write_and_halt_instructions() {
+        let source = std::fs::read_to_string("assignment/p1-2.ram").unwrap();
 
         for (line_index, line) in source.lines().enumerate() {
             let line = line.split(';').next().unwrap_or_default().trim();
@@ -822,10 +753,6 @@ mod tests {
 
     fn factorial(n: Word) -> Word {
         (1..=n).product()
-    }
-
-    fn random_usize_inclusive(rng: &mut Xoshiro256PlusPlus, max: usize) -> usize {
-        (rng.next_u64() % (max as u64 + 1)) as usize
     }
 
     fn random_word_inclusive(rng: &mut Xoshiro256PlusPlus, min: Word, max: Word) -> Word {

@@ -6,29 +6,23 @@ workspace = false
 command = "cargo"
 args = ["run", "--", "sample-ram/test.ram", "--input-file", "sample-ram/input_file" ]
 
+
 [tasks.p1-1]
-description = "p1-1: バブルソートアルゴリズムによって小さい方から大きい方へn個の数を並べ替えるRAMのプログラム"
 workspace = false
 command = "cargo"
 args = ["run", "--", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg", ]
 
-[tasks.p1-2]
-description = "p1-2: 与えられた正の整数nを4つの平方数の和として表すRAMのプログラム"
+[tasks.debug-p1-1]
 workspace = false
 command = "cargo"
-args = ["run", "--", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg", ]
+args = ["run", "--", "debug", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg" ]   
+
+[tasks.p1-2]
+workspace = false
+command = "cargo"
+args = ["run", "--", "assignment/p1-2.ram", "--init-register", "assignment/p1-2.reg", ]
 
 [tasks.debug-p1-2]
 workspace = false
 command = "cargo"
-args = ["run", "--", "debug", "assignment/p1-2.ram", "--input-file", "assignment/p1-2.in", "--init-register", "assignment/p1-2.reg" ]   
-
-[tasks.p1-3]
-workspace = false
-command = "cargo"
-args = ["run", "--", "assignment/p1-3.ram", "--init-register", "assignment/p1-3.reg", ]
-
-[tasks.debug-p1-3]
-workspace = false
-command = "cargo"
-args = ["run", "--", "debug", "assignment/p1-3.ram", "--init-register", "assignment/p1-3.reg" ]
+args = ["run", "--", "debug", "assignment/p1-2.ram", "--init-register", "assignment/p1-2.reg" ]

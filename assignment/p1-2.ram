@@ -1,111 +1,122 @@
-;  正の整数nが与えられたとき，a2 + b2 + c2 + d2 = nとなる
-; 非負の整数の組a, b, c, d を１つなるべく少ないステップ数で
-; 計算して出力するRAMのプログラムを書け．
-; このようなa, b, c, dは必ず存在する（ラグランジュの定理）．
-; nはr1に与えられるとする． 
-; レジスタの使い方
-; - r1: n
-; - r2: a
-; - r3: b
-; - r4: c
-; - r5: d
-; - r6: n1 = n - a * a, ループの管理変数群
-; - r7: n2 = n1 - b * b
-; - r8: n3 = n2 - c * c
-; - r9以降: 適当
+; SJ命令だけで，階乗の計算
+; SJ X, Y, Z: X-YをXに代入，Xが0ならラベルZにジャンプ
+; 引き算の例
+; r1からr2を引いてr1に代入，r1が0ならL1にジャンプ
+;  SJ 1,2,L1
+; L1:
+; 足し算の例
+; r1 = r1 + r2
+; 一時レジスタにr3を使用
+; SJ 3,3,L1 ; r3を0に初期化，L1にジャンプ
+; L1: SJ 3,2,L2 ; r3 = 0 - r2, r2の符号を反転したものを，r3に入れている
+; L2: SJ 1,3,L3 ; r1 = r1 - (0-r2), つまりr1 = r1 + r2
+; L3:
+; JZEROの例
+; L1: SJ 1,1,L2 ; r1を0に初期化，L2にジャンプ
+; L2: SJ 0,1,L4 ; r0が0ならL4にジャンプ
+; true brock
+; L4
+; false block
+; JUMPの例
+; SJ 1,1,L1 ; 無条件でL1にジャンプ, 同じ値を引いてるから，絶対にゼロ
+; L1:
+; SJ命令を考えると，引き算のほうが得意
+; result = n * n-1 * n-2 * ... * 1
+; という流れのほうが楽そうだ
+; 終了条件,
+; if (i == 0){
+; end
+; }else {
+; result = result * i;
+; }
+; ループするプログラムが書ければ，なんとかなる
+; JZEROとJUMPでループを作ることができる
 
-; memo
-; RAMで二乗を計算するには
+; - r2 ゼロ初期化用
+; - r3 ゼロ初期化用
+; - r4 内部ループ，加算用のループ回数管理
+; - r5 5 * 4 のときに，5を保存しておくためのもの． (5*4) * 3 のときに，(5*4)=20を保存しておくためのもの．
+; - r6 掛け算のときに，結果を保存しておくためのもの．
+; - r7 階乗の結果を入れる
+; 11番以降は，一旦適当に使い捨てる
+start: ; 開始
+	; r1にnが入っているという前提でスタート
+	; r1が0なら，1を返して終了
+	; r2をゼロ初期化する
+	SJ 2, 2, zero_if ; r2を0に初期化，zero_ifにジャンプ
+zero_if:	
+	SJ 2,1,end_zero ; r1が0ならend_zeroにジャンプ
 
-start:
-    LOAD =0
-    STORE 2
-loop_a:
-    ; if (a*a <= n), ループ継続
-    ; なので， (a*a > n) ならループ終了
-    LOAD 2
-    MULT 2 ; r0 = a * a
-    STORE 9 ; r9 = a^2
-    SUB 1 ; r0 = a^2 - n
-    JGTZ not_found
-    ; n1 = n - a*a
-    LOAD 1 ; nをロード
-    SUB 9 ; r0 = n - a^2
-    STORE 6 ; r6 = n1
-    ; bのループ
-    ; まずはb=aから始める
-    LOAD 2 ; r0 = a
-    STORE 3 ; r3 = b
-loop_b:
-    ; if (b*b <= n1), ループ継続
-    ; なので， (b*b > n1) ならループ終了
-    LOAD 3 ; r0 = b
-    MULT 3 ; r0 = b * b
-    STORE 9 ; r9 = b^2
-    SUB 6 ; r0 = b^2 - n1
-    JGTZ next_a ; b*b > n1 なら次のbへ
-    ; n2 = n1 - b*b
-    LOAD 6 ; r0 = n1
-    SUB 9 ; r0 = n1 - b^2
-    STORE 7 ; r7 = n2
-    ; cのループ
-    ; まずはc=bから始める
-    LOAD 3 ; r0 = b
-    STORE 4 ; r4 = c
-loop_c:
-    ; if (c*c <= n2), ループ継続
-    ; なので， (c*c > n2) ならループ終了
-    LOAD 4 ; r0 = c
-    MULT 4 ; r0 = c * c
-    STORE 9 ; r9 = c^2
-    SUB 7 ; r0 = c^2 - n2
-    JGTZ next_b ; c*c > n2 なら次のcへ
-    ; n3 = n2 - c*c
-    LOAD 7 ; r0 = n2
-    SUB 9 ; r0 = n2 - c^2
-    STORE 8 ; r8 = n3
-    ; dのループ
-    ; まずはd=cから始める
-    LOAD 4 ; r0 = c
-    STORE 5 ; r5 = d
-loop_d:
-    ; if (d*d <= n3), ループ継続
-    ; なので， (d*d > n3) ならループ終了
-    LOAD 5 ; r0 = d
-    MULT 5 ; r0 = d * d
-    STORE 9 ; r9 = d^2
-    SUB 8 ; r0 = n3 - d^2
-    JGTZ next_c ; d*d > n3 なら次のcへ
-    ; 見つかった場合
-    JZERO found ; n3 - d^2 == 0 なら見つかった
-    ; d++ してループ継続
-    LOAD 5 ; r0 = d
-    ADD =1 ; r0 = d + 1
-    STORE 5 ; r5 = d + 1
-    JUMP loop_d
-next_c: ; 次のcに進む c++
-    LOAD 4 ; r0 = c
-    ADD =1 ; r0 = c + 1
-    STORE 4 ; r4 = c + 1
-    JUMP loop_c
-next_b: ; 次のbに進む b++
-    LOAD 3 ; r0 = b
-    ADD =1 ; r0 = b + 1
-    STORE 3 ; r3 = b + 1
-    JUMP loop_b
-next_a: ; 次のaに進む a++
-    LOAD 2 ; r0 = a
-    ADD =1 ; r0 = a + 1
-    STORE 2 ; r2 = a + 1
-    JUMP loop_a
-found:
-    WRITE 2
-    WRITE 3
-    WRITE 4
-    WRITE 5
-    HALT
-not_found: ; 見つからなかったときのケース． 定理上，必ず見つかるはずなので，ここには来ないはず．
-    WRITE =99 ; 異常を示すために適当な出力
-    HALT
+	; r7 = r1
+	; 階乗の計算結果をr7に保存するので，最初にresult = nとしておく
+	SJ 7,7,init_result1 ; r7を0に初期化，init_result1にジャンプ
+init_result1:
+	SJ 3,3,init_result2 ; r3を0に初期化，init_result2にジャンプ
+init_result2:
+	SJ 3,1,init_result3 ; r3 = 0 - r1，r1の符号を反転したものをr3に入れている
+init_result3:
+	SJ 7,3,init_i ; r7 = 0 - (0-r1)，つまりr7 = r1
+init_i:
+	SJ 1,=1,end ; r1から1を引いてr1に代入，r1が0なら1!なのでendにジャンプ
 
+loop1:
+	; 掛け算を行う
+	; r7 = r7 * r1を，r5をr1回足すことで実現する
+	; たとえば5 * 4のとき，r5に5を保存し，r6に5を4回足して20を作る
+	; 次の(5*4) * 3のとき，r5に20を保存し，r6に20を3回足して60を作る
 
+	; r5 = r7
+	; r5に，今回の掛け算で繰り返し足す値を保存する
+	SJ 5,5,M1 ; r5を0に初期化，M1にジャンプ
+M1:	SJ 3,3,M2 ; r3を0に初期化，M2にジャンプ
+M2:	SJ 3,7,M3 ; r3 = 0 - r7，r7の符号を反転したものをr3に入れている
+M3:	SJ 5,3,M4 ; r5 = 0 - (0-r7)，つまりr5 = r7
+
+	; r6 = 0
+	; r6に，今回の掛け算結果を作る
+M4:	SJ 6,6,M5 ; r6を0に初期化，M5にジャンプ
+
+	; r4 = r1
+	; r4を内部ループの回数管理用にする
+M5:	SJ 4,4,M6 ; r4を0に初期化，M6にジャンプ
+M6:	SJ 3,3,M7 ; r3を0に初期化，M7にジャンプ
+M7:	SJ 3,1,M8 ; r3 = 0 - r1，r1の符号を反転したものをr3に入れている
+M8:	SJ 4,3,loop2 ; r4 = 0 - (0-r1)，つまりr4 = r1
+
+loop2:
+	; r6 = r6 + r5
+	; r5をr4回だけr6に足すことで，r7 * r1を計算する
+	SJ 3,3,M9 ; r3を0に初期化，M9にジャンプ
+M9:	SJ 3,5,M10 ; r3 = 0 - r5，r5の符号を反転したものをr3に入れている
+M10:	SJ 6,3,M11 ; r6 = r6 - (0-r5)，つまりr6 = r6 + r5
+
+M11:
+	SJ 4,=1,L1 ; r4から1を引いてr4に代入，r4が0なら掛け算終了
+	SJ 8,8,loop2 ; r4が0でなければ，無条件にloop2にジャンプ
+
+	; r7 = r6
+	; 今回の掛け算結果を，階乗の途中結果としてr7に戻す
+L1:
+	SJ 7,7,L2 ; r7を0に初期化，L2にジャンプ
+L2:	SJ 3,3,L3 ; r3を0に初期化，L3にジャンプ
+L3:
+	SJ 3,6,L4 ; r3 = 0 - r6，r6の符号を反転したものをr3に入れている
+L4:	SJ 7,3,L5 ; r7 = 0 - (0-r6)，つまりr7 = r6
+L5:
+	SJ 1, =1, end ; r1から1を引いてr1に代入，r1が0ならendにジャンプ
+	SJ 8,8, loop1 ; 無条件にloop1にジャンプ
+end: ; 終了処理
+	WRITE 7 ; r7を出力
+	HALT
+end_zero: ; 0の階乗だった場合の処理
+	; r1が0なら，r7に1を入れて終了
+	SJ 7,7,end_zero1 ; r7を0に初期化，end_zero1にジャンプ
+end_zero1:
+	SJ 3,3,end_zero2 ; r3を0に初期化，end_zero2にジャンプ
+end_zero2:
+	SJ 3,=1,end_zero3 ; r3 = 0 - 1 = -1
+end_zero3:
+	SJ 7,3,end_zero4 ; r7 = 0 - (-1)，つまりr7 = 1
+end_zero4:
+	WRITE 7 ; r7を出力
+	HALT
