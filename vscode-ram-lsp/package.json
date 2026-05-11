@@ -32,13 +32,15 @@
         "ramLsp.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the ram-lsp executable. If empty, the extension tries to use the workspace target/debug/ram-lsp binary."
+          "description": "Path to the ram-lsp executable. If empty, the extension uses a bundled server binary when available, then falls back to the development target/debug binary or PATH."
         }
       }
     }
   },
   "scripts": {
+    "bundle:server": "node scripts/bundle-server.js",
     "compile": "tsc -p ./",
+    "vscode:prepublish": "npm run compile",
     "watch": "tsc -watch -p ./"
   },
   "dependencies": {

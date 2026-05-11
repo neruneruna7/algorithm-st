@@ -1,0 +1,18 @@
+.gitignore
+.vscode/**
+.vscode-test/**
+src/**
+tsconfig.json
+scripts/**
+*.vsix
+
+# Keep runtime JavaScript dependencies, the compiled extension, and the bundled
+# language server in the package. extension.js imports vscode-languageclient at
+# runtime, so node_modules must not be excluded unless the extension is bundled
+# with a tool such as esbuild.
+!node_modules/**
+!out/**
+!server/**
+!syntaxes/**
+!language-configuration.json
+!README.md

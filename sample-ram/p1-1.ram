@@ -1,0 +1,88 @@
+; - 1番地にnが与えられている
+; - 20番地からn + 19番地までにn個の整数が与えられている
+; - バブルソートアルゴリズムによって小さい方から大きい方へn個の数を並べ替えるRAMのプログラム．
+;
+; 使用する番地:
+;   1: n
+;   2: i
+;   3: j
+;   4: limit = n - 1 - i
+;   5: addr_j = 20 + j
+;   6: addr_j1 = 21 + j
+;   7: tmp_j = M[addr_j]
+;   8: tmp_j1 = M[addr_j1]
+
+start:
+	; n <= 1 なら並べ替える必要はない．
+	LOAD 1
+	SUB =1
+	JGTZ sort_start
+	JUMP end
+
+sort_start:
+	LOAD =0
+	STORE 2
+
+loop_i:
+	; i == n - 1 なら外側のループを終了する．
+	LOAD 1
+	SUB =1
+	STORE 4
+	LOAD 2
+	SUB 4
+	JZERO end
+
+	; limit = n - 1 - i
+	LOAD 1
+	SUB =1
+	SUB 2
+	STORE 4
+
+	LOAD =0
+	STORE 3
+
+loop_j:
+	; j == limit なら内側のループを終了する．
+	LOAD 3
+	SUB 4
+	JZERO loop_j_end
+
+	; addr_j = 20 + j, addr_j1 = addr_j + 1
+	LOAD 3
+	ADD =20
+	STORE 5
+	ADD =1
+	STORE 6
+
+	; tmp_j = M[addr_j], tmp_j1 = M[addr_j1]
+	LOAD *5
+	STORE 7
+	LOAD *6
+	STORE 8
+
+	; tmp_j > tmp_j1 なら交換する．
+	LOAD 7
+	SUB 8
+	JGTZ swap
+	JUMP no_swap
+
+swap:
+	LOAD 8
+	STORE *5
+	LOAD 7
+	STORE *6
+
+no_swap:
+	LOAD 3
+	ADD =1
+	STORE 3
+	JUMP loop_j
+
+loop_j_end:
+	LOAD 2
+	ADD =1
+	STORE 2
+	JUMP loop_i
+
+end:
+	HALT
