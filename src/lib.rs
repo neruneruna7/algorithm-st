@@ -746,8 +746,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result.registers[1], n);
-        assert_eq!(result.registers[2], factorial(n));
+        assert_eq!(result.registers[10], factorial(n));
+        assert_eq!(result.output, vec![factorial(n)]);
     }
 
     #[test]
@@ -770,28 +770,36 @@ mod tests {
             )
             .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
 
-            assert_eq!(result.registers[1], n, "case {case_index} failed");
             assert_eq!(
-                result.registers[2],
+                result.registers[10],
                 factorial(n),
+                "case {case_index} failed"
+            );
+            assert_eq!(
+                result.output,
+                vec![factorial(n)],
                 "case {case_index} failed"
             );
         }
     }
 
     #[test]
-    fn assignment_p1_3_uses_only_sj_and_halt_instructions() {
+    fn assignment_p1_3_uses_only_sj_write_and_halt_instructions() {
         let source = std::fs::read_to_string("assignment/p1-3.ram").unwrap();
 
         for (line_index, line) in source.lines().enumerate() {
             let line = line.split(';').next().unwrap_or_default().trim();
+            let line = line
+                .split_once(':')
+                .map(|(_, instruction)| instruction.trim())
+                .unwrap_or(line);
             if line.is_empty() || line.ends_with(':') {
                 continue;
             }
 
             assert!(
-                line.starts_with("SJ ") || line == "HALT",
-                "line {} uses a non-SJ instruction: {line}",
+                line.starts_with("SJ ") || line.starts_with("WRITE ") || line == "HALT",
+                "line {} uses a disallowed instruction: {line}",
                 line_index + 1
             );
         }
