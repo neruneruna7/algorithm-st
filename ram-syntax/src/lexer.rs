@@ -43,7 +43,7 @@ pub enum Opcode {
 pub enum TokenKind {
     Opcode(Opcode),
     LabelName(String),
-    Number(i32),
+    Number(i64),
     Equal,
     Star,
     Comma,
@@ -151,7 +151,7 @@ impl Lexer {
         let line = self.line;
         let start = self.column;
         let lexeme = self.take_while(|ch| ch.is_ascii_digit());
-        let number = lexeme.parse::<i32>().map_err(|_| LexError::InvalidNumber {
+        let number = lexeme.parse::<i64>().map_err(|_| LexError::InvalidNumber {
             lexeme: lexeme.clone(),
             span: Span {
                 line,

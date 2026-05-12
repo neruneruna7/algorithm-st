@@ -8,7 +8,7 @@ pub enum Operand {
     /// 間接アドレッシング
     Indirect(usize),
     /// 即値アドレッシング
-    Immediate(i32),
+    Immediate(i64),
 }
 
 /// RAM命令

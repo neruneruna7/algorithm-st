@@ -109,14 +109,5 @@ end: ; 終了処理
 	WRITE 7 ; r7を出力
 	HALT
 end_zero: ; 0の階乗だった場合の処理
-	; r1が0なら，r7に1を入れて終了
-	SJ 7,7,end_zero1 ; r7を0に初期化，end_zero1にジャンプ
-end_zero1:
-	SJ 3,3,end_zero2 ; r3を0に初期化，end_zero2にジャンプ
-end_zero2:
-	SJ 3,=1,end_zero3 ; r3 = 0 - 1 = -1
-end_zero3:
-	SJ 7,3,end_zero4 ; r7 = 0 - (-1)，つまりr7 = 1
-end_zero4:
-	WRITE 7 ; r7を出力
+	WRITE =1 ; 0!は1なので，1を出力
 	HALT

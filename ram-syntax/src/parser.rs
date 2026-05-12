@@ -185,7 +185,7 @@ impl Parser {
     }
 
     /// 現在位置のトークンが数値であることを確認して読み進める。
-    fn expect_number(&mut self, expected: &str) -> Result<i32, ParseError> {
+    fn expect_number(&mut self, expected: &str) -> Result<i64, ParseError> {
         let token = self.advance().ok_or_else(|| ParseError::UnexpectedEof {
             expected: expected.to_string(),
         })?;

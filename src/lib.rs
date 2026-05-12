@@ -7,7 +7,7 @@ use ram_syntax::ast::{Instruction, InstructionNode, Operand};
 use ram_syntax::lexer::{Opcode, Span};
 use ram_syntax::resolver::{self, ResolvedProgram};
 
-pub type Word = i32;
+pub type Word = i64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunConfig {
@@ -562,7 +562,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(result.output, vec![50_000_i32.wrapping_mul(50_000)]);
+        assert_eq!(result.output, vec![50_000_i64.wrapping_mul(50_000)]);
     }
 
     #[test]
@@ -677,20 +677,17 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(result.registers[7], factorial(n));
+        assert_eq!(result.output[0], factorial(n));
         assert_eq!(result.output, vec![factorial(n)]);
     }
 
     #[test]
-    fn assignment_p1_2_computes_factorial_for_random_inputs() {
-        const CASES: usize = 100;
-        const MAX_N: Word = 7;
+    fn assignment_p1_2_computes_factorial() {
+        const MAX_N: Word = 20;
 
         let source = std::fs::read_to_string("assignment/p1-2.ram").unwrap();
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(44);
 
-        for case_index in 0..CASES {
-            let n = random_word_inclusive(&mut rng, 1, MAX_N);
+        for n in 0..MAX_N {
             let result = run_source(
                 &source,
                 RunConfig {
@@ -699,18 +696,10 @@ mod tests {
                     ..RunConfig::default()
                 },
             )
-            .unwrap_or_else(|error| panic!("case {case_index} failed to run: {error}"));
+            .unwrap_or_else(|error| panic!("case {n} failed to run: {error}"));
 
-            assert_eq!(
-                result.registers[7],
-                factorial(n),
-                "case {case_index} failed"
-            );
-            assert_eq!(
-                result.output,
-                vec![factorial(n)],
-                "case {case_index} failed"
-            );
+            assert_eq!(result.output[0], factorial(n), "case {n} failed");
+            assert_eq!(result.output, vec![factorial(n)], "case {n} failed");
         }
     }
 

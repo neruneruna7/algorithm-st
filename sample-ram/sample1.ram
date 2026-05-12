@@ -9,7 +9,7 @@ loop:
 	STORE 1
 	SUB =5
 	JZERO skip
-	JUMP loop
+	JUMP loo
 skip:
 	HALT
 
