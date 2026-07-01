@@ -36,6 +36,8 @@ fn my_miller_rabin1(p: BigInt, rng: &mut impl Rng) -> MRResult {
 
     // a^d != 1 (mod p)
     let result_1 = a.modpow(&d, &p) != BigInt::one();
+    // a^d, a^{2 d}, a^{4 d} ...
+    //
     let result_2 = (0..s)
         // 指数の計算
         .map(|i| 2_usize.pow(i) * &d)
