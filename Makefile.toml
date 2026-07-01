@@ -31,9 +31,10 @@ args = ["run", "--", "debug", "assignment/p1-2.ram", "--init-register", "assignm
 [tasks.p2-1]
 workspace = false
 command = "cargo"
-args = ["run", "-p", "p2", "--bin", "1"]
+args = ["run", "-p", "p2", "--bin", "1", "${@}"]
+
 
 [tasks.p2-2]
 workspace = false
 command = "cargo"
-args = ["run", "-p", "p2", "--bin", "2"]
+args = ["run", "-p", "p2", "--bin", "2", "${@}"]
