@@ -1,5 +1,5 @@
 use num_bigint::BigInt;
-use num_traits::abs;
+use num_traits::{One, abs};
 
 fn gcd(x: &BigInt, y: &BigInt) -> BigInt {
     match (x, y) {
@@ -22,15 +22,22 @@ fn work() {
     let mut x = BigInt::from(1);
     let mut y = BigInt::from(1);
     let mut count = 0;
+    let mut count2 = 0;
+    let mut pp = BigInt::from(1);
     loop {
         x = g(&x, &n);
         y = gg(&y, &n);
         let diff = &x - &y;
-        let pp = gcd(&abs(diff), &n);
-        if pp != BigInt::from(1) {
-            break;
+        pp = (&abs(diff.clone()) * &pp) % &n;
+        if count2 % 100 == 0 {
+            let px = gcd(&pp, &n);
+            pp = BigInt::one();
+            if px > BigInt::from(1) {
+                break;
+            }
         }
         count += 1;
+        count2 += 1;
         if count % 100000 == 0 {
             println!("Iteration: {count}");
         }
