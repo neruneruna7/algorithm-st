@@ -30,16 +30,17 @@ fn my_miller_rabin1(p: BigInt, rng: &mut impl Rng) -> MRResult {
     // a^d != 1 (mod p)
     // かつ
     // 0 <= forall i < s , a^{2^i d} != -1 (mod p)
+    // mod p の -1 なので，これは　p-1　である
     // であるならば，合成数
     // 出なければ，多分素数
 
     // a^d != 1 (mod p)
-    let result_1 = a.modpow(&d, &p) == BigInt::one();
+    let result_1 = a.modpow(&d, &p) != BigInt::one();
     let result_2 = (0..s)
         // 指数の計算
         .map(|i| 2_usize.pow(i) * &d)
         // 0 <= forall i < s , a^{2^i d} != -1 (mod p)　を計算
-        .all(|exp| a.modpow(&exp, &p) != BigInt::from(-1));
+        .all(|exp| a.modpow(&exp, &p) != p_minus_1);
 
     if result_1 && result_2 {
         MRResult::Composite
