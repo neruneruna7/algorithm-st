@@ -15,7 +15,7 @@ args = ["run", "--", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in"
 [tasks.debug-p1-1]
 workspace = false
 command = "cargo"
-args = ["run", "--", "debug", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg" ]   
+args = ["run", "--", "debug", "assignment/p1-1.ram", "--input-file", "assignment/p1-1.in", "--init-register", "assignment/p1-1.reg" ]
 
 [tasks.p1-2]
 workspace = false
@@ -26,3 +26,14 @@ args = ["run", "--", "assignment/p1-2.ram", "--init-register", "assignment/p1-2.
 workspace = false
 command = "cargo"
 args = ["run", "--", "debug", "assignment/p1-2.ram", "--init-register", "assignment/p1-2.reg" ]
+
+
+[tasks.p2-1]
+workspace = false
+command = "cargo"
+args = ["run", "-p", "p2", "--bin", "1"]
+
+[tasks.p2-2]
+workspace = false
+command = "cargo"
+args = ["run", "-p", "p2", "--bin", "2"]
