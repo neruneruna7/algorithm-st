@@ -1,11 +1,8 @@
 use std::{cell::RefCell, time::Instant};
 
-use num_bigint::{BigInt, RandBigInt as _, ToBigInt};
+use num_bigint::{BigInt, RandBigInt as _};
 use num_traits::{Num as _, One as _, Zero};
-use rand::{
-    Rng, SeedableRng as _,
-    rngs::{SmallRng, ThreadRng},
-};
+use rand::{Rng, SeedableRng as _, rngs::SmallRng};
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 
 thread_local! {
