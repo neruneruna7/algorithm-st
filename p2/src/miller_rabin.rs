@@ -1,5 +1,5 @@
 use num_bigint::BigInt;
-use num_traits::{One, Zero, abs};
+use num_traits::{One, Zero};
 
 use num_bigint::RandBigInt as _;
 use rand::Rng;
@@ -24,14 +24,14 @@ fn my_miller_rabin1(p: &BigInt, rng: &mut impl Rng) -> MRResult {
     // 出なければ，多分素数
 
     // a^d != 1 (mod p)
-    let result_1 = a.modpow(&d, &p) != BigInt::one();
+    let result_1 = a.modpow(&d, p) != BigInt::one();
     // a^d, a^{2 d}, a^{4 d} ...
     //
     let result_2 = (0..s)
         // 指数の計算
         .map(|i| 2_usize.pow(i) * &d)
         // 0 <= forall i < s , a^{2^i d} != -1 (mod p)　を計算
-        .all(|exp| a.modpow(&exp, &p) != p_minus_1);
+        .all(|exp| a.modpow(&exp, p) != p_minus_1);
     // let x0 = a.modpow(&d, &p);
     // let y = std::iter::successors(Some(x0), |x| Some((x * x) % &p))
     //     .take(s as usize)
@@ -75,7 +75,7 @@ pub fn miller_rabin(p: &BigInt, itertions: usize, rng: &mut impl Rng) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 // fn miller_rabin(p: BigInt, itertions: usize, rng: &mut impl Rng) -> bool {

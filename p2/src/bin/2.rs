@@ -9,7 +9,7 @@ fn gcd(x: &BigInt, y: &BigInt) -> BigInt {
     match (x, y) {
         (x, y) if y == &BigInt::from(0) => x.clone(),
         (x, y) if x == &BigInt::from(0) => y.clone(),
-        (x, y) => gcd(&y, &(x % y)),
+        (x, y) => gcd(y, &(x % y)),
     }
 }
 
@@ -24,7 +24,7 @@ fn gg(x: &BigInt, n: &BigInt) -> BigInt {
 fn work() {
     let n = BigInt::from(9145356185469980673640298696124239_u128);
     let mut width = BigInt::from(1);
-    let mut start = BigInt::from(0);
+    let _start = BigInt::from(0);
     let mut count = 0;
     let mut x0 = g(&BigInt::from(3), &n);
     let mut p = BigInt::from(1);
@@ -38,7 +38,7 @@ fn work() {
         let ite = std::iter::successors(Some(BigInt::zero()), |x| Some(x + BigInt::one()))
             .take_while(move |x| x < &end);
 
-        for i in ite {
+        for _i in ite {
             x = g(&x, &n);
             let diff = &x - &x0;
             p = (&p * &abs(diff)) % &n;
@@ -73,7 +73,7 @@ fn rho_method(n: &BigInt, rng: &mut impl Rng) -> Option<BigInt> {
     }
 
     for _ in 0..64 {
-        let c = rng.gen_bigint_range(&one, n);
+        let _c = rng.gen_bigint_range(&one, n);
         let mut x = rng.gen_bigint_range(&two, &(n - &one));
         let mut y = x.clone();
 
@@ -159,8 +159,8 @@ fn quadratic_sieve(n: BigInt) {
     let mut rng = SmallRng::seed_from_u64(48);
     // nの平方根を取り，それをmとする
     let m = n.clone().sqrt();
-    let x = (-8000..=8000);
-    let q_x_vec = x
+    let x = -8000..=8000 ;
+    let _q_x_vec = x
         // Q(x) = (m + x)^2  n
         .map(|x| (&m + BigInt::from(x)).pow(2) - &n)
         // それぞれに素因数分解する
@@ -176,7 +176,7 @@ fn main() {
     // // todo!("課題2")
     // work();
 
-    let grotaan = BigInt::from(57);
+    let _grotaan = BigInt::from(57);
     let factors = prime_factorize(&q, &mut SmallRng::seed_from_u64(48));
     println!("{factors:?}");
 }

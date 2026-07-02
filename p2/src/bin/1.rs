@@ -1,9 +1,9 @@
 use std::{cell::RefCell, time::Instant};
 
-use num_bigint::{BigInt, RandBigInt as _};
+use num_bigint::BigInt;
 use num_traits::{Num as _, One as _, Zero};
 use p2::miller_rabin::miller_rabin;
-use rand::{Rng, SeedableRng as _, rngs::SmallRng};
+use rand::{SeedableRng as _, rngs::SmallRng};
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 
 thread_local! {
