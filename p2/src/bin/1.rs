@@ -2,6 +2,7 @@ use std::{cell::RefCell, time::Instant};
 
 use num_bigint::{BigInt, RandBigInt as _};
 use num_traits::{Num as _, One as _, Zero};
+use p2::miller_rabin::miller_rabin;
 use rand::{Rng, SeedableRng as _, rngs::SmallRng};
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 
@@ -69,7 +70,7 @@ fn find_prime_parallel(start: BigInt, rounds: usize) -> BigInt {
 
             let is_prime = MR_RNG.with(|cell| {
                 let mut rng = cell.borrow_mut();
-                miller_rabin(candidate.clone(), rounds, &mut *rng)
+                miller_rabin(&candidate, rounds, &mut *rng)
             });
 
             if is_prime { Some(candidate) } else { None }
@@ -81,67 +82,4 @@ fn find_prime_parallel(start: BigInt, rounds: usize) -> BigInt {
 
         chunk_base += &chunk_span;
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MRResult {
-    MayBePrime,
-    Composite,
-}
-
-fn my_miller_rabin1(p: BigInt, rng: &mut impl Rng) -> MRResult {
-    // pを，p-1 = 2^s * d　に分解
-    let p_minus_1 = &p - BigInt::one();
-    let (d, s) = decompose(&p_minus_1);
-    // [1, p-1]の範囲からランダムにaを選ぶ
-    let a = rng.gen_bigint_range(&BigInt::from(1_usize), &p_minus_1);
-    // a^d != 1 (mod p)
-    // かつ
-    // 0 <= forall i < s , a^{2^i d} != -1 (mod p)
-    // mod p の -1 なので，これは　p-1　である
-    // であるならば，合成数
-    // 出なければ，多分素数
-
-    // a^d != 1 (mod p)
-    let result_1 = a.modpow(&d, &p) != BigInt::one();
-    // a^d, a^{2 d}, a^{4 d} ...
-    //
-    let result_2 = (0..s)
-        // 指数の計算
-        .map(|i| 2_usize.pow(i) * &d)
-        // 0 <= forall i < s , a^{2^i d} != -1 (mod p)　を計算
-        .all(|exp| a.modpow(&exp, &p) != p_minus_1);
-    // let x0 = a.modpow(&d, &p);
-    // let y = std::iter::successors(Some(x0), |x| Some((x * x) % &p))
-    //     .take(s as usize)
-    //     .any(|x| x == p_minus_1);
-
-    if result_1 && result_2 {
-        MRResult::Composite
-    } else {
-        MRResult::MayBePrime
-    }
-}
-
-fn decompose(p: &BigInt) -> (BigInt, u32) {
-    let two = BigInt::from(2_u32);
-
-    let mut s = 0;
-    let mut d = p.clone();
-    while (&d % &two).is_zero() {
-        d = &d / &two;
-        s += 1;
-    }
-
-    (d, s)
-}
-
-fn miller_rabin(p: BigInt, itertions: usize, rng: &mut impl Rng) -> bool {
-    for _ in 0..itertions {
-        let my_result = my_miller_rabin1(p.clone(), rng);
-        if my_result == MRResult::Composite {
-            return false;
-        }
-    }
-    return true;
 }
