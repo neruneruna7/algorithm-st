@@ -7,15 +7,15 @@ use rand::Rng;
 
 use crate::{miller_rabin::miller_rabin, rho::rho_method};
 
-/// 素数一覧
-static FACTOR_BASE: LazyLock<Vec<u64>> = LazyLock::new(|| {
-    let primes = primes_leq(20000);
-    println!("primes = {:?}", primes);
-    primes
-});
+// /// 素数一覧
+// static FACTOR_BASE: LazyLock<Vec<u64>> = LazyLock::new(|| {
+//     let primes = primes_leq(20000);
+//     println!("primes = {:?}", primes);
+//     primes
+// });
 
 /// 素数生成
-fn primes_leq(limit: u64) -> Vec<u64> {
+pub fn primes_leq(limit: u64) -> Vec<u64> {
     let mut primes = Vec::new();
 
     'outer: for x in 2..=limit {
@@ -81,9 +81,9 @@ fn prime_factorize(n: &BigInt, rng: &mut impl Rng) -> Vec<BigInt> {
 }
 
 /// 素因数を指数としたベクトルと、各素因数の偶奇性を表すベクトルに変換する
-fn factors_to_vectors(factors: &[BigInt]) -> Option<(Vec<u32>, Vec<u8>)> {
+fn factors_to_vectors(factors: &[BigInt], factor_base: &[u64]) -> Option<(Vec<u32>, Vec<u8>)> {
     let minus_one = BigInt::from(-1);
-    let mut exponents = vec![0_u32; FACTOR_BASE.len() + 1];
+    let mut exponents = vec![0_u32; factor_base.len() + 1];
 
     for f in factors {
         if f == &minus_one {
@@ -93,7 +93,7 @@ fn factors_to_vectors(factors: &[BigInt]) -> Option<(Vec<u32>, Vec<u8>)> {
 
         let p = f.to_u64()?;
 
-        let pos = FACTOR_BASE.iter().position(|&q| q == p)?;
+        let pos = factor_base.iter().position(|&q| q == p)?;
 
         exponents[pos + 1] += 1;
     }
@@ -194,11 +194,12 @@ fn build_xy_from_dependency(
     m: &BigInt,
     relations: &[Relation],
     indices: &[usize],
+    factor_base: &[u64],
 ) -> Option<(BigInt, BigInt)> {
     let mut x_prod = BigInt::one();
 
     // exponents[0] は -1 用.
-    let mut exp_sum = vec![0_u32; FACTOR_BASE.len() + 1];
+    let mut exp_sum = vec![0_u32; factor_base.len() + 1];
 
     for &i in indices {
         let rel = &relations[i];
@@ -221,7 +222,7 @@ fn build_xy_from_dependency(
 
     let mut y = BigInt::one();
 
-    for (j, &p) in FACTOR_BASE.iter().enumerate() {
+    for (j, &p) in factor_base.iter().enumerate() {
         let e = exp_sum[j + 1];
 
         if e % 2 != 0 {
@@ -256,13 +257,13 @@ fn extract_factor(n: &BigInt, x: &BigInt, y: &BigInt) -> Option<BigInt> {
     None
 }
 
-fn divide_over_factor_base(qx: &BigInt) -> Option<(Vec<u32>, Vec<u8>)> {
+fn divide_over_factor_base(qx: &BigInt, factor_base: &[u64]) -> Option<(Vec<u32>, Vec<u8>)> {
     if qx.is_zero() {
         return None;
     }
 
     // exponents[0] は -1 用.
-    let mut exponents = vec![0_u32; FACTOR_BASE.len() + 1];
+    let mut exponents = vec![0_u32; factor_base.len() + 1];
 
     let mut rem = if qx.is_negative() {
         exponents[0] = 1;
@@ -271,7 +272,7 @@ fn divide_over_factor_base(qx: &BigInt) -> Option<(Vec<u32>, Vec<u8>)> {
         qx.clone()
     };
 
-    for (i, &p) in FACTOR_BASE.iter().enumerate() {
+    for (i, &p) in factor_base.iter().enumerate() {
         let p_big = BigInt::from(p);
         let mut e = 0_u32;
 
@@ -292,7 +293,7 @@ fn divide_over_factor_base(qx: &BigInt) -> Option<(Vec<u32>, Vec<u8>)> {
     Some((exponents, parity))
 }
 
-pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt {
+pub fn quadratic_sieve1(n: &BigInt, x_range: i32, primes: &[u64]) -> Option<BigInt> {
     // 2次ふるい法
     //　因数分解したい数をn
     let m = n.sqrt();
@@ -301,7 +302,7 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt 
             let x_tilde = x + &m;
             let qx: BigInt = &x_tilde * &x_tilde - n;
 
-            let (exponents, parity) = divide_over_factor_base(&qx)?;
+            let (exponents, parity) = divide_over_factor_base(&qx, primes)?;
 
             Some(Relation {
                 x,
@@ -316,7 +317,7 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt 
         .map(|rel| rel.parity.clone())
         .collect::<Vec<_>>();
 
-    let column_count = FACTOR_BASE.len() + 1;
+    let column_count = primes.len() + 1;
 
     println!("relations={}, columns={}", factors_vec.len(), column_count);
 
@@ -336,16 +337,17 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt 
     // });
 
     for dependency in dependencies {
-        let Some((x, y)) = build_xy_from_dependency(n, &m, &factors_vec, &dependency) else {
+        let Some((x, y)) = build_xy_from_dependency(n, &m, &factors_vec, &dependency, primes)
+        else {
             continue;
         };
 
         println!("candidate: x={}, y={}, dependency={:?}", x, y, dependency);
 
         if let Some(d) = extract_factor(n, &x, &y) {
-            return d;
+            return Some(d);
         }
     }
 
-    panic!("dependencies found, but all produced trivial factors");
+    None
 }

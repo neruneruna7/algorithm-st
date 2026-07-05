@@ -1,6 +1,6 @@
 use num_bigint::BigInt;
 
-use p2::qs::quadratic_sieve1;
+use p2::qs::{primes_leq, quadratic_sieve1};
 use rand::{SeedableRng as _, rngs::SmallRng};
 
 fn main() {
@@ -15,8 +15,9 @@ fn main() {
     // println!("{q}");
     // // todo!("課題2")
     // work();
-    let mut rng = SmallRng::seed_from_u64(1);
+    // let mut rng = SmallRng::seed_from_u64(1);
 
-    let d = quadratic_sieve1(&qd, 8000000, &mut rng);
+    let primes = primes_leq(20000);
+    let d = quadratic_sieve1(&qd, 8000000, &primes);
     println!("{d:?}");
 }
