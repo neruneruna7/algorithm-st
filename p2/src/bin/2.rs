@@ -9,10 +9,12 @@ use p2::{
 use rand::{SeedableRng as _, rngs::SmallRng};
 
 fn main() {
-    let n: i128 = 11629360743077306442685712558623; // 8051 = 83 * 97
+    // let n: i128 = 11629360743077306442685712558623;
+    let n = 914535618546997293219643669199126899_i128;
     let x0: i128 = 2;
     let m: i128 = 16;
 
+    println!("n = {n}");
     let factor = brent_factor(n, x0, m, |x| {
         // x^2 + 1 mod n
         (mul_mod(x, x, n) + 1) % n
