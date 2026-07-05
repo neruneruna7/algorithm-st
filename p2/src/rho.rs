@@ -3,41 +3,39 @@ use num_traits::{One as _, Zero as _, abs};
 use rand::Rng;
 
 fn gcd(x: &BigInt, y: &BigInt) -> BigInt {
-    match (x, y) {
-        (x, y) if y == &BigInt::from(0) => x.clone(),
-        (x, y) if x == &BigInt::from(0) => y.clone(),
-        (x, y) => gcd(y, &(x % y)),
+    let mut a = abs(x.clone());
+    let mut b = abs(y.clone());
+    while !b.is_zero() {
+        let r = &a % &b;
+        a = b;
+        b = r;
     }
+    a
 }
-
-fn g(x: &BigInt, n: &BigInt) -> BigInt {
-    (x * x + 1) % n
-}
-
-fn gg(x: &BigInt, n: &BigInt) -> BigInt {
-    g(&g(x, n), n)
+fn g(x: &BigInt, c: &BigInt, n: &BigInt) -> BigInt {
+    (x * x + c) % n
 }
 
 pub fn rho_method(n: &BigInt, rng: &mut impl Rng) -> Option<BigInt> {
     let one = BigInt::one();
     let two = BigInt::from(2_u32);
+    let three = BigInt::from(3_u32);
 
-    if n <= &one {
+    if n <= &BigInt::from(3_u32) {
         return None;
     }
 
     if (n % 2_u32).is_zero() {
-        return Some(two);
+        return Some(BigInt::from(2_u32));
     }
-
     for _ in 0..64 {
-        let _c = rng.gen_bigint_range(&one, n);
+        let c = rng.gen_bigint_range(&one, n);
         let mut x = rng.gen_bigint_range(&two, &(n - &one));
         let mut y = x.clone();
 
-        for _ in 0..100_000 {
-            x = g(&x, n);
-            y = gg(&y, n);
+        loop {
+            x = g(&x, &c, n);
+            y = g(&g(&y, &c, n), &c, n);
 
             let d = gcd(&abs(&x - &y), n);
 
