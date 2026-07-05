@@ -1,9 +1,10 @@
-use num_traits::{Zero as _, abs};
+use num_bigint::{BigInt, RandBigInt as _};
+use num_traits::{One as _, Zero as _, abs};
 use rand::Rng;
 
 fn gcd(x: i128, y: i128) -> i128 {
-    let mut a = abs(x);
-    let mut b = abs(y);
+    let mut a = abs(x.clone());
+    let mut b = abs(y.clone());
     while !b.is_zero() {
         let r = &a % &b;
         a = b;
@@ -16,41 +17,112 @@ fn g(x: i128, c: i128, n: i128) -> i128 {
 }
 
 pub fn rho_method(n: i128, rng: &mut impl Rng) -> Option<i128> {
-    if n <= i128::from(3_u32) {
+    if n <= 3 {
         return None;
     }
 
     if (n % 2).is_zero() {
         return Some(2);
     }
-    for _ in 0..64 {
+
+    let max_restarts = 128usize;
+    let max_steps_per_restart = 2_000_000usize;
+    let batch_size = 128usize;
+
+    // for _ in 0..max_restarts {
+    let mut count = 0;
+    loop {
+        count += 1;
+        if count % 1000 == 0 {
+            println!("count: {}", count);
+        }
+
         let c = rng.gen_range(1..n);
-        let mut x = rng.gen_range(2..n);
-        let mut y = x;
+        let mut y = rng.gen_range(2..n);
 
-        loop {
-            x = g(x, c, n);
-            y = g(g(y, c, n), c, n);
+        let mut r = 1usize;
+        let mut q = 1;
+        let mut d = 1;
 
-            let d = gcd(abs(x - y), n);
+        let mut x = 0;
+        let mut ys = 0;
+        let mut steps = 0usize;
 
-            if d > 1 && d < n {
-                return Some(d);
+        while d == 1 && steps < max_steps_per_restart {
+            x = y.clone();
+
+            for _ in 0..r {
+                y = g(y, c, n);
+                steps += 1;
+
+                if steps >= max_steps_per_restart {
+                    break;
+                }
             }
 
-            if d == n {
-                break;
+            let mut k = 0usize;
+
+            while k < r && d == 1 && steps < max_steps_per_restart {
+                ys = y.clone();
+
+                let block = batch_size.min(r - k);
+
+                for _ in 0..block {
+                    y = g(y, c, n);
+
+                    let diff = abs(x - y);
+                    if diff == 0 {
+                        break;
+                    }
+
+                    q = (q * diff) % n;
+                    steps += 1;
+
+                    if steps >= max_steps_per_restart {
+                        break;
+                    }
+                }
+
+                d = gcd(q, n);
+                k += block;
+            }
+
+            r = r.saturating_mul(2);
+            q = 1;
+        }
+
+        if d > 1 && d < n {
+            return Some(d);
+        }
+
+        // batch gcd が n になった場合は，最後の区間を1ステップずつ戻って調べる．
+        if d == n {
+            loop {
+                ys = g(ys, c, n);
+                let d = gcd(x - ys, n);
+
+                if d > 1 && d < n {
+                    return Some(d);
+                }
+
+                if d == n {
+                    break;
+                }
             }
         }
     }
 
-    None
+    // None
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rand::{SeedableRng as _, rngs::SmallRng};
+
+    fn bi(n: i128) -> BigInt {
+        BigInt::from(n)
+    }
 
     fn assert_nontrivial_factor(n: i128, d: i128) {
         assert!(d > 1, "factor must be > 1: d = {d}");
@@ -115,8 +187,8 @@ mod tests {
     // fn rho_finds_factor_of_slide_semiprime() {
     //     let mut rng = SmallRng::seed_from_u64(6);
 
-    //     let p = i128::parse_bytes(b"92429849809837999", 10).unwrap();
-    //     let q = i128::parse_bytes(b"98943752524593761", 10).unwrap();
+    //     let p = BigInt::parse_bytes(b"92429849809837999", 10).unwrap();
+    //     let q = BigInt::parse_bytes(b"98943752524593761", 10).unwrap();
     //     let n = &p * &q;
 
     //     let d = rho_method(&n, &mut rng).expect("rho should find a factor");
