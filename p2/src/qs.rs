@@ -55,12 +55,13 @@ pub fn quadratic_sieve1(n: &BigInt, rng: &mut impl Rng) -> BigInt {
     let m = n.sqrt();
     let x = -8000..8000;
     let factors_vec = x
-        .map(|x| {
+        .filter_map(|x| {
             let x_tilde = x + &m;
             let qx: BigInt = &x_tilde * &x_tilde - n;
 
             if qx.is_zero() {
-                return (x, qx, vec![BigInt::zero()]);
+                // 素因子がないものは必要ないので省く
+                return None;
             }
 
             // 負の数だったら，因数に-1を追加するため．
@@ -75,7 +76,7 @@ pub fn quadratic_sieve1(n: &BigInt, rng: &mut impl Rng) -> BigInt {
 
             factors.extend(prime_factorize(&qx_abs, rng));
 
-            (x, if is_negative { -qx_abs } else { qx_abs }, factors)
+            Some((x, if is_negative { -qx_abs } else { qx_abs }, factors))
         })
         // 200以下の素因子を持つものに絞る
         .filter(|v| v.2.iter().all(|f| *f <= BigInt::from(200)))
