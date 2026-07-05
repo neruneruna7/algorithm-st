@@ -293,6 +293,194 @@ fn divide_over_factor_base(qx: &BigInt, factor_base: &[u64]) -> Option<(Vec<u32>
     Some((exponents, parity))
 }
 
+#[derive(Debug, Clone)]
+struct Candidate {
+    x: i32,
+    qx: BigInt,
+    rem: BigInt,
+    exponents: Vec<u32>,
+}
+
+impl Candidate {
+    fn new(n: &BigInt, m: &BigInt, x: i32) -> Option<Self> {
+        let x_tilde = x + m;
+        let qx = &x_tilde * &x_tilde - n;
+
+        if qx.is_zero() {
+            return None;
+        }
+
+        let mut exponents = Vec::new();
+
+        let rem = if qx.is_negative() {
+            exponents.push(1); // -1
+            -qx.clone()
+        } else {
+            exponents.push(0); // -1
+            qx.clone()
+        };
+
+        Some(Self {
+            x,
+            qx,
+            rem,
+            exponents,
+        })
+    }
+
+    fn divide_by_prime_big(&mut self, p: &BigInt) {
+        let mut e = 0_u32;
+
+        while (&self.rem % p).is_zero() {
+            self.rem /= p;
+            e += 1;
+        }
+
+        self.exponents.push(e);
+    }
+
+    fn is_full_relation(&self) -> bool {
+        self.rem == BigInt::one()
+    }
+
+    fn to_relation(&self) -> Option<Relation> {
+        if !self.is_full_relation() {
+            return None;
+        }
+
+        let parity = self
+            .exponents
+            .iter()
+            .map(|e| (e & 1) as u8)
+            .collect::<Vec<_>>();
+
+        Some(Relation {
+            x: self.x,
+            qx: self.qx.clone(),
+            exponents: self.exponents.clone(),
+            parity,
+        })
+    }
+}
+use std::collections::BTreeMap;
+
+struct QSState {
+    n: BigInt,
+    m: BigInt,
+
+    factor_base: Vec<u64>,
+    factor_base_big: Vec<BigInt>,
+
+    searched_start: i32,
+    searched_end: i32, // exclusive
+
+    candidates: BTreeMap<i32, Candidate>,
+}
+impl QSState {
+    fn new(n: &BigInt, initial_range: i32, initial_prime_bound: u64) -> Self {
+        let m = n.sqrt();
+
+        let factor_base = primes_leq(initial_prime_bound);
+        let factor_base_big = factor_base
+            .iter()
+            .map(|&p| BigInt::from(p))
+            .collect::<Vec<_>>();
+
+        let mut state = Self {
+            n: n.clone(),
+            m,
+            factor_base,
+            factor_base_big,
+            searched_start: 0,
+            searched_end: 0,
+            candidates: BTreeMap::new(),
+        };
+
+        state.extend_x_range_to(initial_range);
+
+        state
+    }
+    fn extend_x_range_to(&mut self, radius: i32) {
+        let new_start = -radius;
+        let new_end = radius;
+
+        if new_start >= self.searched_start && new_end <= self.searched_end {
+            return;
+        }
+
+        for x in new_start..self.searched_start {
+            self.add_candidate_if_absent(x);
+        }
+
+        for x in self.searched_end..new_end {
+            self.add_candidate_if_absent(x);
+        }
+
+        self.searched_start = self.searched_start.min(new_start);
+        self.searched_end = self.searched_end.max(new_end);
+    }
+
+    fn add_candidate_if_absent(&mut self, x: i32) {
+        if self.candidates.contains_key(&x) {
+            return;
+        }
+
+        let Some(mut cand) = Candidate::new(&self.n, &self.m, x) else {
+            return;
+        };
+
+        for p_big in &self.factor_base_big {
+            cand.divide_by_prime_big(p_big);
+        }
+
+        debug_assert_eq!(cand.exponents.len(), self.factor_base.len() + 1);
+
+        self.candidates.insert(x, cand);
+    }
+    fn extend_factor_base_to(&mut self, new_bound: u64) {
+        let old_len = self.factor_base.len();
+
+        let new_factor_base = primes_leq(new_bound);
+
+        if new_factor_base.len() <= old_len {
+            return;
+        }
+
+        let new_primes = &new_factor_base[old_len..];
+
+        let new_primes_big = new_primes
+            .iter()
+            .map(|&p| BigInt::from(p))
+            .collect::<Vec<_>>();
+
+        for p_big in &new_primes_big {
+            for cand in self.candidates.values_mut() {
+                cand.divide_by_prime_big(p_big);
+            }
+        }
+
+        self.factor_base = new_factor_base;
+
+        self.factor_base_big.extend(new_primes_big);
+
+        debug_assert_eq!(self.factor_base.len(), self.factor_base_big.len());
+
+        for cand in self.candidates.values() {
+            debug_assert_eq!(cand.exponents.len(), self.factor_base.len() + 1);
+        }
+    }
+    fn full_relations(&self) -> Vec<Relation> {
+        self.candidates
+            .values()
+            .filter_map(|cand| cand.to_relation())
+            .collect()
+    }
+
+    fn column_count(&self) -> usize {
+        self.factor_base.len() + 1
+    }
+}
+
 pub fn quadratic_sieve1(n: &BigInt, x_range: i32, primes: &[u64]) -> Option<BigInt> {
     // 2次ふるい法
     //　因数分解したい数をn
@@ -343,6 +531,79 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, primes: &[u64]) -> Option<BigI
         };
 
         println!("candidate: x={}, y={}, dependency={:?}", x, y, dependency);
+
+        if let Some(d) = extract_factor(n, &x, &y) {
+            return Some(d);
+        }
+    }
+
+    None
+}
+
+pub fn quadratic_sieve_adaptive(
+    n: &BigInt,
+    max_prime_bound: u64,
+    max_x_range: i32,
+) -> Option<BigInt> {
+    let mut prime_bound = 200_u64;
+    let mut x_range = 8_000_i32;
+
+    let mut state = QSState::new(n, x_range, prime_bound);
+
+    loop {
+        let relations = state.full_relations();
+
+        println!(
+            "prime_bound={}, x_range={}, candidates={}, relations={}, columns={}",
+            prime_bound,
+            x_range,
+            state.candidates.len(),
+            relations.len(),
+            state.column_count(),
+        );
+
+        if let Some(d) = try_relations(&state.n, &state.m, &state.factor_base, &relations) {
+            return Some(d);
+        }
+
+        if prime_bound >= max_prime_bound && x_range >= max_x_range {
+            return None;
+        }
+
+        if prime_bound < max_prime_bound {
+            prime_bound = (prime_bound * 2).min(max_prime_bound);
+            state.extend_factor_base_to(prime_bound);
+        }
+
+        if x_range < max_x_range {
+            x_range = (x_range * 2).min(max_x_range);
+            state.extend_x_range_to(x_range);
+        }
+    }
+}
+
+fn try_relations(
+    n: &BigInt,
+    m: &BigInt,
+    factor_base: &[u64],
+    relations: &[Relation],
+) -> Option<BigInt> {
+    if relations.is_empty() {
+        return None;
+    }
+
+    let parities = relations
+        .iter()
+        .map(|rel| rel.parity.clone())
+        .collect::<Vec<_>>();
+
+    let dependencies = find_dependencies_gf2(&parities);
+
+    for dependency in dependencies {
+        let Some((x, y)) = build_xy_from_dependency(n, m, relations, &dependency, factor_base)
+        else {
+            continue;
+        };
 
         if let Some(d) = extract_factor(n, &x, &y) {
             return Some(d);
