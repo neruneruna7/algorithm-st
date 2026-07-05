@@ -1184,6 +1184,7 @@ name = "p2"
 version = "0.1.0"
 dependencies = [
  "num-bigint",
+ "num-integer",
  "num-traits",
  "rand 0.8.6",
  "rayon",

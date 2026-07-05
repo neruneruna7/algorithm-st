@@ -7,4 +7,5 @@ edition = "2024"
 rand = { version = "0.8.5", features = ["small_rng"] }
 num-bigint = { version = "0.4", features = ["rand"] }
 num-traits = "0.2"
+num-integer = "0.1.46"
 rayon = "1.12.0"

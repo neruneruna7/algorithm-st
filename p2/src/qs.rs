@@ -1,4 +1,5 @@
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
 use rand::Rng;
 
@@ -165,6 +166,73 @@ fn find_dependencies_gf2(parities: &[Vec<u8>]) -> Vec<Vec<usize>> {
         .collect()
 }
 
+fn build_xy_from_dependency(
+    n: &BigInt,
+    m: &BigInt,
+    relations: &[Relation],
+    indices: &[usize],
+) -> Option<(BigInt, BigInt)> {
+    let mut x_prod = BigInt::one();
+
+    // exponents[0] は -1 用.
+    let mut exp_sum = vec![0_u32; FACTOR_BASE.len() + 1];
+
+    for &i in indices {
+        let rel = &relations[i];
+
+        // rel.x は offset なので，実際の x_tilde を復元する.
+        let x_tilde = m + rel.x;
+
+        x_prod = (x_prod * x_tilde) % n;
+
+        for (s, e) in exp_sum.iter_mut().zip(&rel.exponents) {
+            *s += *e;
+        }
+    }
+
+    // -1 の指数が奇数なら，積は正の平方数ではない.
+    // 正しく dependency が取れていれば偶数になるはず.
+    if exp_sum[0] % 2 != 0 {
+        return None;
+    }
+
+    let mut y = BigInt::one();
+
+    for (j, &p) in FACTOR_BASE.iter().enumerate() {
+        let e = exp_sum[j + 1];
+
+        if e % 2 != 0 {
+            return None;
+        }
+
+        let p_big = BigInt::from(p);
+
+        for _ in 0..(e / 2) {
+            y *= &p_big;
+        }
+    }
+
+    Some((x_prod, y % n))
+}
+
+fn extract_factor(n: &BigInt, x: &BigInt, y: &BigInt) -> Option<BigInt> {
+    let one = BigInt::one();
+
+    let d1 = (x - y).abs().gcd(n);
+
+    if d1 > one && d1 < *n {
+        return Some(d1);
+    }
+
+    let d2 = (x + y).abs().gcd(n);
+
+    if d2 > one && d2 < *n {
+        return Some(d2);
+    }
+
+    None
+}
+
 pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt {
     // 2次ふるい法
     //　因数分解したい数をn
@@ -217,11 +285,11 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt 
 
     println!("relations={}, columns={}", factors_vec.len(), column_count);
 
-    if factors_vec.len() <= column_count {
-        panic!("not enough relations");
-    }
     let dependencies = find_dependencies_gf2(&parities);
 
+    if dependencies.is_empty() {
+        panic!("no dependency found; collect more relations");
+    }
     println!("dependencies = {:?}", dependencies);
 
     // factors_vec.iter().for_each(|i| {
@@ -232,5 +300,17 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt 
     //     println!("factors: x={} qx={:?} factors={:?}", x, qx, factors);
     // });
 
-    todo!()
+    for dependency in dependencies {
+        let Some((x, y)) = build_xy_from_dependency(n, &m, &factors_vec, &dependency) else {
+            continue;
+        };
+
+        println!("candidate: x={}, y={}, dependency={:?}", x, y, dependency);
+
+        if let Some(d) = extract_factor(n, &x, &y) {
+            return d;
+        }
+    }
+
+    panic!("dependencies found, but all produced trivial factors");
 }
