@@ -77,13 +77,13 @@ pub fn quadratic_sieve1(n: &BigInt, rng: &mut impl Rng) -> BigInt {
 
             (x, if is_negative { -qx_abs } else { qx_abs }, factors)
         })
+        // 200以下の素因子を持つものに絞る
+        .filter(|v| v.2.iter().all(|f| *f <= BigInt::from(200)))
         .collect::<Vec<_>>();
 
     factors_vec.iter().for_each(|(x, qx, factors)| {
         println!("factors: x={} qx={:?} factors={:?}", x, qx, factors);
     });
-
-    // let x_tilde =
 
     todo!()
 }
