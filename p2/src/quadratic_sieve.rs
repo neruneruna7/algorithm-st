@@ -44,9 +44,7 @@ struct BasisRow {
 
 #[derive(Debug, Clone)]
 struct Relation {
-    x_value: i64,
     x_mod: BigInt,
-    qx: BigInt,
     exponents: Vec<u32>,
     parity: BitSet,
 }
@@ -91,11 +89,32 @@ fn primes_up_to(bound: u64) -> Vec<u64> {
     (2..=bound).filter(|&x| is_prime[x as usize]).collect()
 }
 
-fn make_factor_base(bound: u64) -> Vec<i64> {
+fn bigint_mod_u64(x: &BigInt, modulus: u64) -> u64 {
+    let modulus_big = BigInt::from(modulus);
+    let residue = ((x % &modulus_big) + &modulus_big) % &modulus_big;
+
+    residue.try_into().expect("residue should fit into u64")
+}
+
+fn roots_mod_prime(n: &BigInt, p: u64) -> Vec<u64> {
+    let n_mod = bigint_mod_u64(n, p);
+
+    if p == 2 {
+        return vec![n_mod];
+    }
+
+    (0..p)
+        .filter(|&r| ((r as u128 * r as u128) % p as u128) as u64 == n_mod)
+        .collect()
+}
+
+fn make_factor_base(n: &BigInt, bound: u64) -> Vec<i64> {
     let mut base = vec![-1_i64];
 
     for p in primes_up_to(bound) {
-        base.push(p as i64);
+        if !roots_mod_prime(n, p).is_empty() {
+            base.push(p as i64);
+        }
     }
 
     base
@@ -145,16 +164,16 @@ fn find_gf2_dependencies(rows: &[BitSet], n_cols: usize) -> Vec<Vec<usize>> {
         let mut combination = BitSet::new(n_rows);
         combination.set(row_index);
 
-        for col in 0..n_cols {
+        for (col, basis_slot) in basis.iter_mut().enumerate().take(n_cols) {
             if !v.get(col) {
                 continue;
             }
 
-            if let Some(basis_row) = &basis[col] {
+            if let Some(basis_row) = basis_slot.as_ref() {
                 v.xor_assign(&basis_row.parity);
                 combination.xor_assign(&basis_row.combination);
             } else {
-                basis[col] = Some(BasisRow {
+                *basis_slot = Some(BasisRow {
                     parity: v,
                     combination,
                 });
@@ -185,12 +204,106 @@ fn build_relation(n: &BigInt, m: &BigInt, x: i64, factor_base: &[i64]) -> Option
     let (exponents, parity) = factor_over_base(&qx, factor_base)?;
 
     Some(Relation {
-        x_value: x,
         x_mod: mx,
-        qx,
         exponents,
         parity,
     })
+}
+
+fn q_value(n: &BigInt, m: &BigInt, x: i64) -> BigInt {
+    let x_big = BigInt::from(x);
+    let mx = m + &x_big;
+
+    mx.pow(2) - n
+}
+
+fn collect_relations_by_trial_division(
+    n: &BigInt,
+    m: &BigInt,
+    interval: i64,
+    factor_base: &[i64],
+) -> Vec<Relation> {
+    (-interval..=interval)
+        .filter_map(|x| build_relation(n, m, x, factor_base))
+        .collect()
+}
+
+fn first_integer_in_range_with_residue(min: i64, residue: i64, modulus: i64) -> i64 {
+    let delta = (residue - min).rem_euclid(modulus);
+
+    min + delta
+}
+
+fn collect_relations_by_sieving(
+    n: &BigInt,
+    m: &BigInt,
+    interval: i64,
+    factor_base: &[i64],
+    threshold: f64,
+) -> Vec<Relation> {
+    if interval < 0 {
+        return Vec::new();
+    }
+
+    let size = (2 * interval + 1) as usize;
+    let offset = interval;
+    let mut scores = vec![0_f64; size];
+
+    for x in -interval..=interval {
+        let idx = (x + offset) as usize;
+        let abs_qx = abs(q_value(n, m, x));
+
+        scores[idx] = if abs_qx.is_zero() {
+            0.0
+        } else {
+            abs_qx.to_string().len() as f64 * std::f64::consts::LN_10
+        };
+    }
+
+    let m_mod_by_prime: Vec<u64> = factor_base
+        .iter()
+        .skip(1)
+        .map(|&p| bigint_mod_u64(m, p as u64))
+        .collect();
+
+    for (&p_i64, &m_mod) in factor_base.iter().skip(1).zip(m_mod_by_prime.iter()) {
+        let p = p_i64 as u64;
+        let p_i64 = p as i64;
+        let log_p = (p as f64).ln();
+
+        for root in roots_mod_prime(n, p) {
+            let residue = ((root + p - m_mod) % p) as i64;
+            let mut x = first_integer_in_range_with_residue(-interval, residue, p_i64);
+
+            while x <= interval {
+                let idx = (x + offset) as usize;
+                scores[idx] -= log_p;
+                x += p_i64;
+            }
+        }
+    }
+
+    (-interval..=interval)
+        .filter(|&x| scores[(x + offset) as usize] < threshold)
+        .filter_map(|x| build_relation(n, m, x, factor_base))
+        .collect()
+}
+
+fn find_factor_from_relations(
+    n: &BigInt,
+    factor_base: &[i64],
+    relations: &[Relation],
+) -> Option<BigInt> {
+    let rows: Vec<BitSet> = relations.iter().map(|r| r.parity.clone()).collect();
+    let dependencies = find_gf2_dependencies(&rows, factor_base.len());
+
+    for dependency in dependencies {
+        if let Some(factor) = build_congruence_factor(n, factor_base, relations, &dependency) {
+            return Some(factor);
+        }
+    }
+
+    None
 }
 
 fn build_congruence_factor(
@@ -255,30 +368,16 @@ pub fn quadratic_sieve(n: &BigInt, factor_bound: u64, interval: i64) -> Option<B
         return Some(m);
     }
 
-    let factor_base = make_factor_base(factor_bound);
-    let mut relations = Vec::new();
+    let factor_base = make_factor_base(n, factor_bound);
+    let relations = collect_relations_by_sieving(n, &m, interval, &factor_base, 12.0);
 
-    for x in -interval..=interval {
-        if let Some(relation) = build_relation(n, &m, x, &factor_base) {
-            relations.push(relation);
-        }
+    if let Some(factor) = find_factor_from_relations(n, &factor_base, &relations) {
+        return Some(factor);
     }
 
-    let rows: Vec<BitSet> = relations.iter().map(|r| r.parity.clone()).collect();
+    let relations = collect_relations_by_trial_division(n, &m, interval, &factor_base);
 
-    let dependencies = find_gf2_dependencies(&rows, factor_base.len());
-
-    if dependencies.is_empty() {
-        return None;
-    }
-
-    for dependency in dependencies {
-        if let Some(factor) = build_congruence_factor(n, &factor_base, &relations, &dependency) {
-            return Some(factor);
-        }
-    }
-
-    None
+    find_factor_from_relations(n, &factor_base, &relations)
 }
 
 #[cfg(test)]
