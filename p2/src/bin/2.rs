@@ -1,7 +1,7 @@
 use num_bigint::BigInt;
 
 use num_integer::Integer as _;
-use num_traits::{One as _, Signed as _, Zero as _};
+use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
 use p2::{
     miller_rabin::miller_rabin,
     qs2::quadratic_sieve,
@@ -94,8 +94,12 @@ fn prime_factorize(n: &BigInt) -> Vec<BigInt> {
     // }
     // 2次ふるい法で，何か因数を1つ見つける．
     // これは素因数とは限らない．
-    let factor = quadratic_sieve(n)
-        .filter(|f| *f > one && *f < *n)
+    let n_i128 = n
+        .to_i128()
+        .unwrap_or_else(|| panic!("quadratic_sieve requires an i128-sized input: {n}"));
+    let factor = quadratic_sieve(&n_i128)
+        .filter(|f| *f > 1 && *f < n_i128 && n_i128 % *f == 0)
+        .map(BigInt::from)
         .unwrap_or_else(|| {
             panic!("quadratic_sieve failed to find a non-trivial factor for {n}");
         });

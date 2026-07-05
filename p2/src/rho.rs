@@ -28,7 +28,13 @@ pub fn rho_method(n: i128, rng: &mut impl Rng) -> Option<i128> {
         let mut x = rng.gen_range(2..n);
         let mut y = x;
 
+        let mut count = 0;
         loop {
+            count += 1;
+            if count % 1000 == 0 {
+                println!("count = {count}");
+            }
+
             x = g(x, c, n);
             y = g(g(y, c, n), c, n);
 

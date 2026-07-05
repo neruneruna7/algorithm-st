@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use num_bigint::BigInt;
 use num_integer::{Integer as _, Roots as _};
-use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
 
 const DEFAULT_MIN_RELATION_MARGIN: usize = 16;
 const DEFAULT_POLYNOMIAL_LIMIT: usize = 256;
@@ -60,7 +58,7 @@ pub struct QsStats {
 
 #[derive(Clone, Debug)]
 pub struct QsResult {
-    pub factor: BigInt,
+    pub factor: i128,
     pub stats: QsStats,
 }
 
@@ -137,9 +135,9 @@ struct FactorBase {
 
 #[derive(Clone, Debug)]
 struct Polynomial {
-    a: BigInt,
-    b: BigInt,
-    c: BigInt,
+    a: i128,
+    b: i128,
+    c: i128,
     a_factors: Vec<u64>,
 }
 
@@ -147,7 +145,7 @@ struct Polynomial {
 struct Relation {
     /// The left side value `X`, i.e. `A*x + B` for one MPQS relation, or a product
     /// of such values for a combined large-prime relation.
-    x_value: BigInt,
+    x_value: i128,
     /// Factor-base exponent vector. Column 0 is `-1`.
     exponents: Vec<u32>,
     /// Additional factors known to occur with even total exponent, e.g. one large
@@ -180,30 +178,30 @@ struct DoublePartialRelation {
 ///
 /// 旧 API の `(factor_bound, interval)` は廃止し，既定の `QsConfig` で MPQS を実行する．
 /// 返る値は素数とは限らない．呼び出し側で Miller-Rabin, rho, 再帰分解を組み合わせる．
-pub fn quadratic_sieve(n: &BigInt) -> Option<BigInt> {
+pub fn quadratic_sieve(n: &i128) -> Option<i128> {
     quadratic_sieve_with_config(n, &QsConfig::default()).map(|r| r.factor)
 }
 
 /// 設定付きで MPQS を実行し，因数と統計情報を返す．
-pub fn quadratic_sieve_with_config(n: &BigInt, config: &QsConfig) -> Option<QsResult> {
-    if n <= &BigInt::one() {
+pub fn quadratic_sieve_with_config(n: &i128, config: &QsConfig) -> Option<QsResult> {
+    if *n <= 1 {
         return None;
     }
 
-    if (n % 2_u32).is_zero() {
-        return if n == &BigInt::from(2_u32) {
+    if n % 2 == 0 {
+        return if *n == 2 {
             None
         } else {
             Some(QsResult {
-                factor: BigInt::from(2_u32),
+                factor: 2,
                 stats: empty_stats(1, 2, 1),
             })
         };
     }
 
     let root = n.sqrt();
-    if (&root * &root) == n.clone() {
-        return if root > BigInt::one() && &root < n {
+    if root.checked_mul(root) == Some(*n) {
+        return if root > 1 && root < *n {
             Some(QsResult {
                 factor: root,
                 stats: empty_stats(1, 2, 1),
@@ -264,7 +262,7 @@ fn empty_stats(multiplier: u64, factor_bound: u64, interval: i64) -> QsStats {
 }
 
 fn quadratic_sieve_once(
-    n: &BigInt,
+    n: &i128,
     config: &QsConfig,
     resolved: ResolvedQsConfig,
 ) -> Option<QsResult> {
@@ -273,14 +271,14 @@ fn quadratic_sieve_once(
     } else {
         1
     };
-    if multiplier > 1 && (n % multiplier).is_zero() {
+    if multiplier > 1 && (n % multiplier as i128) == 0 {
         return Some(QsResult {
-            factor: BigInt::from(multiplier),
+            factor: multiplier as i128,
             stats: empty_stats(multiplier, resolved.bound, resolved.interval),
         });
     }
 
-    let kn = n * BigInt::from(multiplier);
+    let kn = n.checked_mul(multiplier as i128)?;
     let factor_base = make_factor_base(&kn, resolved.bound);
     if factor_base.primes.len() < 6 {
         return None;
@@ -333,11 +331,11 @@ fn quadratic_sieve_once(
     }
 
     if config.trial_division_fallback && resolved.interval <= 50_000 {
-        let m = kn.sqrt() + 1_u32;
+        let m = kn.sqrt().checked_add(1)?;
         let fallback_poly = Polynomial {
-            a: BigInt::one(),
-            b: m.clone(),
-            c: &m * &m - &kn,
+            a: 1,
+            b: m,
+            c: m.checked_mul(m)?.checked_sub(kn)?,
             a_factors: Vec::new(),
         };
         collect_relations_by_trial_division(
@@ -369,15 +367,15 @@ fn quadratic_sieve_once(
     None
 }
 
-fn choose_factor_bound(n: &BigInt) -> u64 {
-    let ln_n = bigint_ln_approx(n).max(8.0);
+fn choose_factor_bound(n: &i128) -> u64 {
+    let ln_n = int_ln_approx(*n).max(8.0);
     let ln_ln_n = ln_n.ln().max(1.0);
     let l_n = (ln_n * ln_ln_n).sqrt().exp();
     let b = (l_n / 6.0).sqrt();
     b.clamp(128.0, 1_000_000.0) as u64
 }
 
-fn choose_multiplier(n: &BigInt, factor_bound: u64, search_limit: u64) -> u64 {
+fn choose_multiplier(n: &i128, factor_bound: u64, search_limit: u64) -> u64 {
     // Knuth/Contini style scoring in a small, deliberately simple form: prefer k such
     // that k*n is a quadratic residue for many small primes, while penalizing large k.
     let primes = primes_up_to(factor_bound.min(300));
@@ -389,19 +387,21 @@ fn choose_multiplier(n: &BigInt, factor_bound: u64, search_limit: u64) -> u64 {
     let mut best_score = f64::NEG_INFINITY;
 
     for k in candidates {
-        let kn = n * BigInt::from(k);
+        let Some(kn) = n.checked_mul(k as i128) else {
+            continue;
+        };
         let mut score = -0.5 * (k as f64).ln();
 
         for &p in primes.iter().take(80) {
             if p == 2 {
-                let r = bigint_mod_u64(&kn, 8);
+                let r = int_mod_u64(kn, 8);
                 score += match r {
                     1 => 2.0 * std::f64::consts::LN_2,
                     3 | 5 => 0.5 * std::f64::consts::LN_2,
                     _ => 0.0,
                 };
             } else {
-                let r = bigint_mod_u64(&kn, p);
+                let r = int_mod_u64(kn, p);
                 if r == 0 {
                     score += (p as f64).ln();
                 } else if legendre_symbol(r, p) == 1 {
@@ -443,7 +443,7 @@ fn primes_up_to(bound: u64) -> Vec<u64> {
     (2..=bound).filter(|&x| sieve[x as usize]).collect()
 }
 
-fn make_factor_base(n: &BigInt, bound: u64) -> FactorBase {
+fn make_factor_base(n: &i128, bound: u64) -> FactorBase {
     let mut entries = Vec::new();
 
     for p in primes_up_to(bound) {
@@ -468,11 +468,9 @@ fn make_factor_base(n: &BigInt, bound: u64) -> FactorBase {
     }
 }
 
-fn bigint_mod_u64(x: &BigInt, modulus: u64) -> u64 {
+fn int_mod_u64(x: i128, modulus: u64) -> u64 {
     debug_assert!(modulus > 0);
-    let m = BigInt::from(modulus);
-    let r = ((x % &m) + &m) % &m;
-    r.to_u64().expect("residue must fit into u64")
+    x.rem_euclid(modulus as i128) as u64
 }
 
 fn mod_pow_u64(base: u64, mut exp: u64, modulus: u64) -> u64 {
@@ -493,6 +491,52 @@ fn mod_pow_u64(base: u64, mut exp: u64, modulus: u64) -> u64 {
     }
 
     acc as u64
+}
+
+fn add_mod_u128(a: u128, b: u128, modulus: u128) -> u128 {
+    debug_assert!(a < modulus);
+    debug_assert!(b < modulus);
+    if a >= modulus - b {
+        a - (modulus - b)
+    } else {
+        a + b
+    }
+}
+
+fn mul_mod_u128(mut a: u128, mut b: u128, modulus: u128) -> u128 {
+    debug_assert!(modulus > 0);
+    a %= modulus;
+    b %= modulus;
+    let mut acc = 0_u128;
+
+    while b > 0 {
+        if b & 1 == 1 {
+            acc = add_mod_u128(acc, a, modulus);
+        }
+        a = add_mod_u128(a, a, modulus);
+        b >>= 1;
+    }
+
+    acc
+}
+
+fn mod_pow_u128(mut base: u128, mut exp: u32, modulus: u128) -> u128 {
+    if modulus == 1 {
+        return 0;
+    }
+
+    base %= modulus;
+    let mut acc = 1_u128 % modulus;
+
+    while exp > 0 {
+        if exp & 1 == 1 {
+            acc = mul_mod_u128(acc, base, modulus);
+        }
+        base = mul_mod_u128(base, base, modulus);
+        exp >>= 1;
+    }
+
+    acc
 }
 
 fn mod_inverse_u64(a: u64, modulus: u64) -> Option<u64> {
@@ -550,7 +594,7 @@ fn sqrt_mod_prime_odd(n: u64, p: u64) -> Option<u64> {
 
     let mut q = p - 1;
     let mut s = 0_u32;
-    while q % 2 == 0 {
+    while q.is_multiple_of(2) {
         q /= 2;
         s += 1;
     }
@@ -561,7 +605,7 @@ fn sqrt_mod_prime_odd(n: u64, p: u64) -> Option<u64> {
     }
 
     let mut c = mod_pow_u64(z, q, p);
-    let mut x = mod_pow_u64(n, (q + 1) / 2, p);
+    let mut x = mod_pow_u64(n, q.div_ceil(2), p);
     let mut t = mod_pow_u64(n, q, p);
     let mut m = s;
 
@@ -586,8 +630,8 @@ fn sqrt_mod_prime_odd(n: u64, p: u64) -> Option<u64> {
     Some(x)
 }
 
-fn roots_mod_prime(n: &BigInt, p: u64) -> Vec<u64> {
-    let n_mod = bigint_mod_u64(n, p);
+fn roots_mod_prime(n: &i128, p: u64) -> Vec<u64> {
+    let n_mod = int_mod_u64(*n, p);
 
     if p == 2 {
         return vec![n_mod & 1];
@@ -601,16 +645,16 @@ fn roots_mod_prime(n: &BigInt, p: u64) -> Vec<u64> {
     if r == r2 { vec![r] } else { vec![r, r2] }
 }
 
-fn crt_pair(r1: &BigInt, m1: &BigInt, r2: u64, m2: u64) -> Option<BigInt> {
-    let m1_mod = bigint_mod_u64(m1, m2);
+fn crt_pair(r1: i128, m1: i128, r2: u64, m2: u64) -> Option<i128> {
+    let m1_mod = int_mod_u64(m1, m2);
     let inv = mod_inverse_u64(m1_mod, m2)?;
-    let r1_mod = bigint_mod_u64(r1, m2);
+    let r1_mod = int_mod_u64(r1, m2);
     let t = ((r2 + m2 - r1_mod) as u128 * inv as u128 % m2 as u128) as u64;
-    Some(r1 + m1 * BigInt::from(t))
+    r1.checked_add(m1.checked_mul(t as i128)?)
 }
 
 fn generate_polynomials(
-    n: &BigInt,
+    n: &i128,
     factor_base: &FactorBase,
     interval: i64,
     max_count: usize,
@@ -623,17 +667,20 @@ fn generate_polynomials(
         .collect::<Vec<_>>();
 
     if odd_primes.len() < 3 {
-        let m = n.sqrt() + 1_u32;
+        let m = n.sqrt().checked_add(1).unwrap_or(*n);
+        let Some(c) = m.checked_mul(m).and_then(|v| v.checked_sub(*n)) else {
+            return Vec::new();
+        };
         return vec![Polynomial {
-            a: BigInt::one(),
-            b: m.clone(),
-            c: &m * &m - n,
+            a: 1,
+            b: m,
+            c,
             a_factors: Vec::new(),
         }];
     }
 
     let target_a_ln =
-        (0.5 * bigint_ln_approx(n) + 0.5 * 2.0_f64.ln() - (interval.max(1) as f64).ln()).max(1.0);
+        (0.5 * int_ln_approx(*n) + 0.5 * 2.0_f64.ln() - (interval.max(1) as f64).ln()).max(1.0);
 
     let target_k = (target_a_ln / (factor_base.largest_prime as f64).ln().max(2.0))
         .ceil()
@@ -650,31 +697,38 @@ fn generate_polynomials(
     let pool_len = sorted.len().min((target_k * 8).max(24));
     let pool = &sorted[..pool_len];
     let mut polynomials = Vec::new();
-    let mut used_a = HashMap::<String, usize>::new();
+    let mut used_a = HashMap::<i128, usize>::new();
 
     for start in 0..pool.len() {
         if polynomials.len() >= max_count {
             break;
         }
         let mut factors = Vec::new();
-        let mut a = BigInt::one();
+        let mut a = 1_i128;
 
         for j in 0..target_k {
             let entry = &pool[(start + j * 3) % pool.len()];
             factors.push(entry.clone());
-            a *= entry.p;
+            let Some(next_a) = a.checked_mul(entry.p as i128) else {
+                factors.clear();
+                break;
+            };
+            a = next_a;
         }
         factors.sort_by_key(|e| e.p);
         factors.dedup_by_key(|e| e.p);
         if factors.len() < 2 {
             continue;
         }
-        a = factors
+        let Some(recomputed_a) = factors
             .iter()
-            .fold(BigInt::one(), |acc, entry| acc * BigInt::from(entry.p));
+            .try_fold(1_i128, |acc, entry| acc.checked_mul(entry.p as i128))
+        else {
+            continue;
+        };
+        a = recomputed_a;
 
-        let a_key = a.to_string();
-        let counter = used_a.entry(a_key).or_insert(0);
+        let counter = used_a.entry(a).or_insert(0);
         let sign_masks_to_try = 1_usize << factors.len().min(8);
         let first_mask = *counter;
         *counter += sign_masks_to_try;
@@ -684,8 +738,8 @@ fn generate_polynomials(
                 break;
             }
             let mask = first_mask + local_mask;
-            let mut b = BigInt::zero();
-            let mut modulus = BigInt::one();
+            let mut b = 0_i128;
+            let mut modulus = 1_i128;
             let mut ok = true;
 
             for (i, entry) in factors.iter().enumerate() {
@@ -695,12 +749,16 @@ fn generate_polynomials(
                 } else {
                     *roots.last().unwrap_or(&roots[0])
                 };
-                let Some(new_b) = crt_pair(&b, &modulus, selected, entry.p) else {
+                let Some(new_b) = crt_pair(b, modulus, selected, entry.p) else {
                     ok = false;
                     break;
                 };
                 b = new_b;
-                modulus *= entry.p;
+                let Some(new_modulus) = modulus.checked_mul(entry.p as i128) else {
+                    ok = false;
+                    break;
+                };
+                modulus = new_modulus;
             }
 
             if !ok || modulus != a {
@@ -708,45 +766,49 @@ fn generate_polynomials(
             }
 
             // Use a centered B to keep |Q(x)| smaller near x=0.
-            if &b * 2_u32 > a {
-                b -= &a;
+            if b.checked_mul(2).is_some_and(|v| v > a) {
+                b -= a;
             }
 
-            let numerator = &b * &b - n;
-            if (&numerator % &a) != BigInt::zero() {
+            let Some(numerator) = b.checked_mul(b).and_then(|v| v.checked_sub(*n)) else {
+                continue;
+            };
+            if numerator % a != 0 {
                 continue;
             }
-            let c = numerator / &a;
+            let c = numerator / a;
             let a_factors = factors.iter().map(|e| e.p).collect::<Vec<_>>();
-            polynomials.push(Polynomial {
-                a: a.clone(),
-                b,
-                c,
-                a_factors,
-            });
+            polynomials.push(Polynomial { a, b, c, a_factors });
         }
     }
 
     if polynomials.is_empty() {
-        let m = n.sqrt() + 1_u32;
-        polynomials.push(Polynomial {
-            a: BigInt::one(),
-            b: m.clone(),
-            c: &m * &m - n,
-            a_factors: Vec::new(),
-        });
+        let m = n.sqrt().checked_add(1).unwrap_or(*n);
+        if let Some(c) = m.checked_mul(m).and_then(|v| v.checked_sub(*n)) {
+            polynomials.push(Polynomial {
+                a: 1,
+                b: m,
+                c,
+                a_factors: Vec::new(),
+            });
+        }
     }
 
     polynomials
 }
 
-fn polynomial_x(poly: &Polynomial, x: i64) -> BigInt {
-    &poly.a * BigInt::from(x) + &poly.b
+fn polynomial_x(poly: &Polynomial, x: i64) -> Option<i128> {
+    poly.a
+        .checked_mul(x as i128)
+        .and_then(|v| v.checked_add(poly.b))
 }
 
-fn polynomial_q(poly: &Polynomial, x: i64) -> BigInt {
-    let x_big = BigInt::from(x);
-    &poly.a * &x_big * &x_big + 2_u32 * &poly.b * &x_big + &poly.c
+fn polynomial_q(poly: &Polynomial, x: i64) -> Option<i128> {
+    let x = x as i128;
+    let x2 = x.checked_mul(x)?;
+    let ax2 = poly.a.checked_mul(x2)?;
+    let two_bx = 2_i128.checked_mul(poly.b)?.checked_mul(x)?;
+    ax2.checked_add(two_bx)?.checked_add(poly.c)
 }
 
 fn add_a_factor_exponents(exponents: &mut [u32], factor_base: &FactorBase, a_factors: &[u64]) {
@@ -768,53 +830,56 @@ fn parity_from_exponents(exponents: &[u32]) -> BitSet {
 }
 
 fn factor_q_over_base(
-    qx: &BigInt,
+    qx: i128,
     poly: &Polynomial,
     factor_base: &FactorBase,
     config: &QsConfig,
     allow_large_prime: bool,
 ) -> Option<(Vec<u32>, BitSet, LargeRemainder)> {
-    if qx.is_zero() {
+    if qx == 0 {
         return None;
     }
 
-    let mut rest = qx.clone();
+    let mut rest = qx;
     let mut exponents = vec![0_u32; factor_base.columns];
 
     add_a_factor_exponents(&mut exponents, factor_base, &poly.a_factors);
 
-    if rest.is_negative() {
+    if rest < 0 {
         exponents[0] += 1;
-        rest = -rest;
+        rest = rest.checked_neg()?;
     }
 
     for entry in &factor_base.primes {
-        let p_big = BigInt::from(entry.p);
-        while (&rest % &p_big).is_zero() {
-            rest /= &p_big;
+        let p = entry.p as i128;
+        while rest % p == 0 {
+            rest /= p;
             exponents[entry.column] += 1;
         }
     }
 
     let parity = parity_from_exponents(&exponents);
-    if rest == BigInt::one() {
+    if rest == 1 {
         return Some((exponents, parity, LargeRemainder::None));
     }
 
-    if allow_large_prime && config.use_large_primes {
-        if let Some(lp) = rest.to_u64() {
-            let b = factor_base.largest_prime.max(2);
-            let single_limit = b.saturating_mul(b).saturating_mul(128).max(b + 1);
-            if lp > b && lp <= single_limit && is_prime_u64(lp) {
-                return Some((exponents, parity, LargeRemainder::Single(lp)));
-            }
+    if allow_large_prime
+        && config.use_large_primes
+        && let Ok(lp) = u64::try_from(rest)
+    {
+        let b = factor_base.largest_prime.max(2);
+        let single_limit = b.saturating_mul(b).saturating_mul(128).max(b + 1);
+        if lp > b && lp <= single_limit && is_prime_u64(lp) {
+            return Some((exponents, parity, LargeRemainder::Single(lp)));
+        }
 
-            let double_limit = single_limit.saturating_mul(b.max(2)).min(u64::MAX / 4);
-            if config.use_double_large_primes && lp > b && lp <= double_limit {
-                if let Some((p1, p2)) = split_two_large_primes(lp, b) {
-                    return Some((exponents, parity, LargeRemainder::Double(p1, p2)));
-                }
-            }
+        let double_limit = single_limit.saturating_mul(b.max(2)).min(u64::MAX / 4);
+        if config.use_double_large_primes
+            && lp > b
+            && lp <= double_limit
+            && let Some((p1, p2)) = split_two_large_primes(lp, b)
+        {
+            return Some((exponents, parity, LargeRemainder::Double(p1, p2)));
         }
     }
 
@@ -825,12 +890,12 @@ fn is_prime_u64(n: u64) -> bool {
     if n < 2 {
         return false;
     }
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         return n == 2;
     }
     let mut d = 3_u64;
     while d <= n / d {
-        if n % d == 0 {
+        if n.is_multiple_of(d) {
             return false;
         }
         d += 2;
@@ -848,7 +913,7 @@ fn split_two_large_primes(n: u64, factor_base_bound: u64) -> Option<(u64, u64)> 
 
     let mut d = 2_u64;
     while d <= n / d {
-        if n % d == 0 {
+        if n.is_multiple_of(d) {
             let q = n / d;
             if d > factor_base_bound && q > factor_base_bound && is_prime_u64(d) && is_prime_u64(q)
             {
@@ -863,20 +928,21 @@ fn split_two_large_primes(n: u64, factor_base_bound: u64) -> Option<(u64, u64)> 
 }
 
 fn build_relation(
-    n: &BigInt,
+    n: &i128,
     poly: &Polynomial,
     x: i64,
     factor_base: &FactorBase,
     config: &QsConfig,
     allow_large_prime: bool,
 ) -> Option<(Relation, LargeRemainder)> {
-    let qx = polynomial_q(poly, x);
+    let qx = polynomial_q(poly, x)?;
     let (exponents, parity, large_remainder) =
-        factor_q_over_base(&qx, poly, factor_base, config, allow_large_prime)?;
+        factor_q_over_base(qx, poly, factor_base, config, allow_large_prime)?;
+    let x_value = polynomial_x(poly, x)?.mod_floor(n);
 
     Some((
         Relation {
-            x_value: polynomial_x(poly, x).mod_floor(n),
+            x_value,
             exponents,
             square_factors: Vec::new(),
             parity,
@@ -886,7 +952,7 @@ fn build_relation(
 }
 
 fn collect_relations_by_trial_division(
-    n: &BigInt,
+    n: &i128,
     poly: &Polynomial,
     interval: i64,
     factor_base: &FactorBase,
@@ -910,21 +976,20 @@ fn first_integer_in_range_with_residue(min: i64, residue: i64, modulus: i64) -> 
     min + (residue - min).rem_euclid(modulus)
 }
 
-fn bigint_ln_approx(x: &BigInt) -> f64 {
-    if x.is_zero() {
+fn int_ln_approx(x: i128) -> f64 {
+    if x == 0 {
         return f64::NEG_INFINITY;
     }
-    if let Some(v) = x.abs().to_f64() {
-        if v.is_finite() && v > 0.0 {
-            return v.ln();
-        }
+    let v = (x as f64).abs();
+    if v.is_finite() && v > 0.0 {
+        return v.ln();
     }
-    let digits = x.abs().to_string().len() as f64;
+    let digits = x.unsigned_abs().to_string().len() as f64;
     digits * std::f64::consts::LN_10
 }
 
 fn collect_relations_mpqs(
-    n: &BigInt,
+    n: &i128,
     poly: &Polynomial,
     interval: i64,
     factor_base: &FactorBase,
@@ -948,7 +1013,9 @@ fn collect_relations_mpqs(
     let mut residual_logs = vec![0.0_f64; size];
 
     for x in -interval..=interval {
-        residual_logs[(x + offset) as usize] = bigint_ln_approx(&polynomial_q(poly, x).abs());
+        residual_logs[(x + offset) as usize] = polynomial_q(poly, x)
+            .map(int_ln_approx)
+            .unwrap_or(f64::INFINITY);
     }
 
     for entry in &factor_base.primes {
@@ -956,13 +1023,13 @@ fn collect_relations_mpqs(
         if p == 0 {
             continue;
         }
-        let a_mod = bigint_mod_u64(&poly.a, p);
+        let a_mod = int_mod_u64(poly.a, p);
         let Some(a_inv) = mod_inverse_u64(a_mod, p) else {
             // p divides A. The A contribution is already known; exact verification will
             // handle any additional power of p. Skipping this prime keeps root handling simple.
             continue;
         };
-        let b_mod = bigint_mod_u64(&poly.b, p);
+        let b_mod = int_mod_u64(poly.b, p);
         let p_i64 = p as i64;
 
         for &root in &entry.roots {
@@ -1080,7 +1147,7 @@ fn find_double_large_prime_path(
 }
 
 fn combine_single_large_prime_relations(
-    n: &BigInt,
+    n: &i128,
     left: Relation,
     right: Relation,
     large_prime: u64,
@@ -1093,9 +1160,11 @@ fn combine_single_large_prime_relations(
     let mut square_factors = left.square_factors;
     square_factors.extend(right.square_factors);
     square_factors.push(large_prime);
+    let modulus = *n as u128;
+    let x_value = mul_mod_u128(left.x_value as u128, right.x_value as u128, modulus) as i128;
 
     Relation {
-        x_value: (left.x_value * right.x_value).mod_floor(n),
+        x_value,
         exponents,
         square_factors,
         parity,
@@ -1103,7 +1172,7 @@ fn combine_single_large_prime_relations(
 }
 
 fn combine_double_large_prime_cycle(
-    n: &BigInt,
+    n: &i128,
     current: Relation,
     current_p1: u64,
     current_p2: u64,
@@ -1116,10 +1185,11 @@ fn combine_double_large_prime_cycle(
 
     *large_counts.entry(current_p1).or_insert(0) += 1;
     *large_counts.entry(current_p2).or_insert(0) += 1;
+    let modulus = *n as u128;
 
     for &edge_id in path_edges {
         let edge = &double_partials[edge_id];
-        x_value = (x_value * &edge.relation.x_value).mod_floor(n);
+        x_value = mul_mod_u128(x_value as u128, edge.relation.x_value as u128, modulus) as i128;
         for (a, b) in exponents.iter_mut().zip(edge.relation.exponents.iter()) {
             *a += *b;
         }
@@ -1192,11 +1262,11 @@ fn find_gf2_dependencies(rows: &[BitSet], n_cols: usize) -> Vec<Vec<usize>> {
 }
 
 fn find_factor_from_relations(
-    original_n: &BigInt,
-    sieve_n: &BigInt,
+    original_n: &i128,
+    sieve_n: &i128,
     factor_base: &FactorBase,
     relations: &[Relation],
-) -> Option<BigInt> {
+) -> Option<i128> {
     if relations.len() <= factor_base.columns {
         return None;
     }
@@ -1218,54 +1288,66 @@ fn find_factor_from_relations(
 }
 
 fn build_congruence_factor(
-    original_n: &BigInt,
-    sieve_n: &BigInt,
+    original_n: &i128,
+    sieve_n: &i128,
     factor_base: &FactorBase,
     relations: &[Relation],
     dependency: &[usize],
-) -> Option<BigInt> {
-    let mut x_prod = BigInt::one();
+) -> Option<i128> {
+    let modulus = u128::try_from(*sieve_n).ok()?;
+    let mut x_prod = 1_u128 % modulus;
     let mut exponent_sums = vec![0_u32; factor_base.columns];
     let mut square_factors = Vec::<u64>::new();
 
     for &i in dependency {
         let relation = &relations[i];
-        x_prod = (x_prod * &relation.x_value).mod_floor(sieve_n);
+        x_prod = mul_mod_u128(x_prod, u128::try_from(relation.x_value).ok()?, modulus);
         for (sum, &e) in exponent_sums.iter_mut().zip(relation.exponents.iter()) {
             *sum = sum.checked_add(e)?;
         }
         square_factors.extend(relation.square_factors.iter().copied());
     }
 
-    if exponent_sums[0] % 2 != 0 {
+    if !exponent_sums[0].is_multiple_of(2) {
         return None;
     }
 
-    let mut y_prod = BigInt::one();
+    let mut y_prod = 1_u128 % modulus;
 
     for entry in &factor_base.primes {
         let e = exponent_sums[entry.column];
-        if e % 2 != 0 {
+        if !e.is_multiple_of(2) {
             return None;
         }
         let half_exp = e / 2;
         if half_exp > 0 {
-            y_prod = (y_prod * BigInt::from(entry.p).modpow(&BigInt::from(half_exp), sieve_n))
-                .mod_floor(sieve_n);
+            y_prod = mul_mod_u128(
+                y_prod,
+                mod_pow_u128(entry.p as u128, half_exp, modulus),
+                modulus,
+            );
         }
     }
 
     for p in square_factors {
-        y_prod = (y_prod * BigInt::from(p)).mod_floor(sieve_n);
+        y_prod = mul_mod_u128(y_prod, p as u128, modulus);
     }
 
-    let d1 = (&x_prod - &y_prod).abs().gcd(original_n);
-    if d1 > BigInt::one() && &d1 < original_n {
+    let x_prod = i128::try_from(x_prod).ok()?;
+    let y_prod = i128::try_from(y_prod).ok()?;
+    let d1 = (x_prod - y_prod).abs().gcd(original_n);
+    if d1 > 1 && d1 < *original_n {
         return Some(d1);
     }
 
-    let d2 = (&x_prod + &y_prod).abs().gcd(original_n);
-    if d2 > BigInt::one() && &d2 < original_n {
+    let original_modulus = u128::try_from(*original_n).ok()?;
+    let sum_mod_original = add_mod_u128(
+        (x_prod as u128) % original_modulus,
+        (y_prod as u128) % original_modulus,
+        original_modulus,
+    ) as i128;
+    let d2 = sum_mod_original.gcd(original_n);
+    if d2 > 1 && d2 < *original_n {
         return Some(d2);
     }
 
@@ -1276,29 +1358,29 @@ fn build_congruence_factor(
 mod tests {
     use super::*;
 
-    fn assert_nontrivial_factor(n: &BigInt, d: &BigInt) {
-        assert!(d > &BigInt::one(), "d must be > 1: {d}");
+    fn assert_nontrivial_factor(n: i128, d: i128) {
+        assert!(d > 1, "d must be > 1: {d}");
         assert!(d < n, "d must be < n: d={d}, n={n}");
-        assert!((n % d).is_zero(), "d must divide n: d={d}, n={n}");
+        assert!(n % d == 0, "d must divide n: d={d}, n={n}");
     }
 
     #[test]
     fn qs2_returns_two_for_even_composite() {
-        let n = BigInt::from(100_u32);
+        let n = 100_i128;
         let d = quadratic_sieve(&n).expect("should find factor");
-        assert_eq!(d, BigInt::from(2_u32));
+        assert_eq!(d, 2);
     }
 
     #[test]
     fn qs2_returns_square_root_for_square() {
-        let n = BigInt::from(101_u32).pow(2);
+        let n = 101_i128.pow(2);
         let d = quadratic_sieve(&n).expect("should find factor");
-        assert_eq!(d, BigInt::from(101_u32));
+        assert_eq!(d, 101);
     }
 
     #[test]
     fn qs2_factors_small_semiprime() {
-        let n = BigInt::from(8051_u32); // 83 * 97
+        let n = 8051_i128; // 83 * 97
         let d = quadratic_sieve_with_config(
             &n,
             &QsConfig {
@@ -1309,12 +1391,12 @@ mod tests {
         )
         .expect("should find factor")
         .factor;
-        assert_nontrivial_factor(&n, &d);
+        assert_nontrivial_factor(n, d);
     }
 
     #[test]
     fn qs2_factors_medium_semiprime() {
-        let n = BigInt::from(405003390007_u64); // 270001 * 1500007
+        let n = 405003390007_i128; // 270001 * 1500007
         let d = quadratic_sieve_with_config(
             &n,
             &QsConfig {
@@ -1325,12 +1407,12 @@ mod tests {
         )
         .expect("should find factor")
         .factor;
-        assert_nontrivial_factor(&n, &d);
+        assert_nontrivial_factor(n, d);
     }
 
     #[test]
     fn qs2_generates_mpqs_polynomials() {
-        let n = BigInt::from(8051_u32);
+        let n = 8051_i128;
         let fb = make_factor_base(&n, 100);
         let polys = generate_polynomials(&n, &fb, 1000, 10);
         assert!(!polys.is_empty());

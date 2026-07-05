@@ -49,7 +49,7 @@ pub fn rho_method(n: i128, rng: &mut impl Rng) -> Option<i128> {
         let mut steps = 0usize;
 
         while d == 1 && steps < max_steps_per_restart {
-            x = y.clone();
+            x = y;
 
             for _ in 0..r {
                 y = g(y, c, n);
@@ -63,7 +63,7 @@ pub fn rho_method(n: i128, rng: &mut impl Rng) -> Option<i128> {
             let mut k = 0usize;
 
             while k < r && d == 1 && steps < max_steps_per_restart {
-                ys = y.clone();
+                ys = y;
 
                 let block = batch_size.min(r - k);
 
