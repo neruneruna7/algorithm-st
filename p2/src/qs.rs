@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
@@ -7,15 +5,8 @@ use rand::Rng;
 
 use crate::{miller_rabin::miller_rabin, rho::rho_method};
 
-// /// 素数一覧
-// static FACTOR_BASE: LazyLock<Vec<u64>> = LazyLock::new(|| {
-//     let primes = primes_leq(20000);
-//     println!("primes = {:?}", primes);
-//     primes
-// });
-
 /// 素数生成
-pub fn primes_leq(limit: u64) -> Vec<u64> {
+pub fn primes_leq(limit: u128) -> Vec<u128> {
     let mut primes = Vec::new();
 
     'outer: for x in 2..=limit {
@@ -81,7 +72,7 @@ fn prime_factorize(n: &BigInt, rng: &mut impl Rng) -> Vec<BigInt> {
 }
 
 /// 素因数を指数としたベクトルと、各素因数の偶奇性を表すベクトルに変換する
-fn factors_to_vectors(factors: &[BigInt], factor_base: &[u64]) -> Option<(Vec<u32>, Vec<u8>)> {
+fn factors_to_vectors(factors: &[BigInt], factor_base: &[u128]) -> Option<(Vec<u32>, Vec<u8>)> {
     let minus_one = BigInt::from(-1);
     let mut exponents = vec![0_u32; factor_base.len() + 1];
 
@@ -91,7 +82,7 @@ fn factors_to_vectors(factors: &[BigInt], factor_base: &[u64]) -> Option<(Vec<u3
             continue;
         }
 
-        let p = f.to_u64()?;
+        let p = f.to_u128()?;
 
         let pos = factor_base.iter().position(|&q| q == p)?;
 
@@ -105,7 +96,7 @@ fn factors_to_vectors(factors: &[BigInt], factor_base: &[u64]) -> Option<(Vec<u3
 
 #[derive(Debug, Clone)]
 struct Relation {
-    x: i32,
+    x: i128,
     qx: BigInt,
     exponents: Vec<u32>,
     parity: Vec<u8>,
@@ -117,6 +108,7 @@ struct GF2Row {
     combo: Vec<u8>,
 }
 
+/// GF(2)
 fn find_dependencies_gf2(parities: &[Vec<u8>]) -> Vec<Vec<usize>> {
     let row_count = parities.len();
 
@@ -194,7 +186,7 @@ fn build_xy_from_dependency(
     m: &BigInt,
     relations: &[Relation],
     indices: &[usize],
-    factor_base: &[u64],
+    factor_base: &[u128],
 ) -> Option<(BigInt, BigInt)> {
     let mut x_prod = BigInt::one();
 
@@ -257,7 +249,7 @@ fn extract_factor(n: &BigInt, x: &BigInt, y: &BigInt) -> Option<BigInt> {
     None
 }
 
-fn divide_over_factor_base(qx: &BigInt, factor_base: &[u64]) -> Option<(Vec<u32>, Vec<u8>)> {
+fn divide_over_factor_base(qx: &BigInt, factor_base: &[u128]) -> Option<(Vec<u32>, Vec<u8>)> {
     if qx.is_zero() {
         return None;
     }
@@ -295,15 +287,15 @@ fn divide_over_factor_base(qx: &BigInt, factor_base: &[u64]) -> Option<(Vec<u32>
 
 #[derive(Debug, Clone)]
 struct Candidate {
-    x: i32,
+    x: i128,
     qx: BigInt,
     rem: BigInt,
     exponents: Vec<u32>,
 }
 
 impl Candidate {
-    fn new(n: &BigInt, m: &BigInt, x: i32) -> Option<Self> {
-        let x_tilde = x + m;
+    fn new(n: &BigInt, m: &BigInt, x: i128) -> Option<Self> {
+        let x_tilde = m + BigInt::from(x);
         let qx = &x_tilde * &x_tilde - n;
 
         if qx.is_zero() {
@@ -328,11 +320,12 @@ impl Candidate {
         })
     }
 
-    fn divide_by_prime_big(&mut self, p: &BigInt) {
+    fn divide_by_prime(&mut self, p: u128) {
+        let p_big = BigInt::from(p);
         let mut e = 0_u32;
 
-        while (&self.rem % p).is_zero() {
-            self.rem /= p;
+        while (&self.rem % &p_big).is_zero() {
+            self.rem /= &p_big;
             e += 1;
         }
 
@@ -368,44 +361,39 @@ struct QSState {
     n: BigInt,
     m: BigInt,
 
-    factor_base: Vec<u64>,
-    factor_base_big: Vec<BigInt>,
+    factor_base: Vec<u128>,
 
-    searched_start: i32,
-    searched_end: i32, // exclusive
+    searched_start: i128,
+    searched_end: i128, // exclusive
 
-    candidates: BTreeMap<i32, Candidate>,
+    candidates: BTreeMap<i128, Candidate>,
 }
 impl QSState {
-    fn new(n: &BigInt, initial_range: i32, initial_prime_bound: u64) -> Self {
+    fn new(n: &BigInt, initial_range: u128, initial_prime_bound: u128) -> Option<Self> {
         let m = n.sqrt();
 
         let factor_base = primes_leq(initial_prime_bound);
-        let factor_base_big = factor_base
-            .iter()
-            .map(|&p| BigInt::from(p))
-            .collect::<Vec<_>>();
 
         let mut state = Self {
             n: n.clone(),
             m,
             factor_base,
-            factor_base_big,
             searched_start: 0,
             searched_end: 0,
             candidates: BTreeMap::new(),
         };
 
-        state.extend_x_range_to(initial_range);
+        state.extend_x_range_to(initial_range)?;
 
-        state
+        Some(state)
     }
-    fn extend_x_range_to(&mut self, radius: i32) {
+    fn extend_x_range_to(&mut self, radius: u128) -> Option<()> {
+        let radius = i128::try_from(radius).ok()?;
         let new_start = -radius;
         let new_end = radius;
 
         if new_start >= self.searched_start && new_end <= self.searched_end {
-            return;
+            return Some(());
         }
 
         for x in new_start..self.searched_start {
@@ -418,9 +406,11 @@ impl QSState {
 
         self.searched_start = self.searched_start.min(new_start);
         self.searched_end = self.searched_end.max(new_end);
+
+        Some(())
     }
 
-    fn add_candidate_if_absent(&mut self, x: i32) {
+    fn add_candidate_if_absent(&mut self, x: i128) {
         if self.candidates.contains_key(&x) {
             return;
         }
@@ -429,15 +419,15 @@ impl QSState {
             return;
         };
 
-        for p_big in &self.factor_base_big {
-            cand.divide_by_prime_big(p_big);
+        for &p in &self.factor_base {
+            cand.divide_by_prime(p);
         }
 
         debug_assert_eq!(cand.exponents.len(), self.factor_base.len() + 1);
 
         self.candidates.insert(x, cand);
     }
-    fn extend_factor_base_to(&mut self, new_bound: u64) {
+    fn extend_factor_base_to(&mut self, new_bound: u128) {
         let old_len = self.factor_base.len();
 
         let new_factor_base = primes_leq(new_bound);
@@ -448,22 +438,13 @@ impl QSState {
 
         let new_primes = &new_factor_base[old_len..];
 
-        let new_primes_big = new_primes
-            .iter()
-            .map(|&p| BigInt::from(p))
-            .collect::<Vec<_>>();
-
-        for p_big in &new_primes_big {
+        for &p in new_primes {
             for cand in self.candidates.values_mut() {
-                cand.divide_by_prime_big(p_big);
+                cand.divide_by_prime(p);
             }
         }
 
         self.factor_base = new_factor_base;
-
-        self.factor_base_big.extend(new_primes_big);
-
-        debug_assert_eq!(self.factor_base.len(), self.factor_base_big.len());
 
         for cand in self.candidates.values() {
             debug_assert_eq!(cand.exponents.len(), self.factor_base.len() + 1);
@@ -481,13 +462,14 @@ impl QSState {
     }
 }
 
-pub fn quadratic_sieve1(n: &BigInt, x_range: i32, primes: &[u64]) -> Option<BigInt> {
+pub fn quadratic_sieve1(n: &BigInt, x_range: u128, primes: &[u128]) -> Option<BigInt> {
     // 2次ふるい法
     //　因数分解したい数をn
     let m = n.sqrt();
+    let x_range = i128::try_from(x_range).ok()?;
     let factors_vec = (-x_range..x_range)
         .filter_map(|x| {
-            let x_tilde = x + &m;
+            let x_tilde = &m + BigInt::from(x);
             let qx: BigInt = &x_tilde * &x_tilde - n;
 
             let (exponents, parity) = divide_over_factor_base(&qx, primes)?;
@@ -542,13 +524,13 @@ pub fn quadratic_sieve1(n: &BigInt, x_range: i32, primes: &[u64]) -> Option<BigI
 
 pub fn quadratic_sieve_adaptive(
     n: &BigInt,
-    max_prime_bound: u64,
-    max_x_range: i32,
+    max_prime_bound: u128,
+    max_x_range: u128,
 ) -> Option<BigInt> {
-    let mut prime_bound = 200_u64;
-    let mut x_range = 8_000_i32;
+    let mut prime_bound = 200_u128;
+    let mut x_range = 8_000_u128;
 
-    let mut state = QSState::new(n, x_range, prime_bound);
+    let mut state = QSState::new(n, x_range, prime_bound)?;
 
     loop {
         let relations = state.full_relations();
@@ -576,8 +558,8 @@ pub fn quadratic_sieve_adaptive(
         }
 
         if x_range < max_x_range {
-            x_range = (x_range * 2).min(max_x_range);
-            state.extend_x_range_to(x_range);
+            x_range = x_range.saturating_mul(2).min(max_x_range);
+            state.extend_x_range_to(x_range)?;
         }
     }
 }
@@ -585,7 +567,7 @@ pub fn quadratic_sieve_adaptive(
 fn try_relations(
     n: &BigInt,
     m: &BigInt,
-    factor_base: &[u64],
+    factor_base: &[u128],
     relations: &[Relation],
 ) -> Option<BigInt> {
     if relations.is_empty() {
