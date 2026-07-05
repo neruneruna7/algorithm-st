@@ -8,11 +8,15 @@ fn main() {
     // let _q = BigInt::from(128);
     // let q = BigInt::from(405003390007_u128);
     let q = BigInt::from(11629360743077306442685712558623_u128);
+    // 5195515532454019
+    let qd =
+        BigInt::from(11629360743077306442685712558623_u128) / BigInt::from(5195515532454019_u128);
+    println!("qd = {}", qd);
     // println!("{q}");
     // // todo!("課題2")
     // work();
     let mut rng = SmallRng::seed_from_u64(1);
 
-    let d = quadratic_sieve1(&q, 800000, &mut rng);
+    let d = quadratic_sieve1(&qd, 8000000, &mut rng);
     println!("{d:?}");
 }

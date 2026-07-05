@@ -9,7 +9,7 @@ use crate::{miller_rabin::miller_rabin, rho::rho_method};
 
 /// 素数一覧
 static FACTOR_BASE: LazyLock<Vec<u64>> = LazyLock::new(|| {
-    let primes = primes_leq(10000);
+    let primes = primes_leq(20000);
     println!("primes = {:?}", primes);
     primes
 });
