@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
@@ -5,12 +7,33 @@ use rand::Rng;
 
 use crate::{miller_rabin::miller_rabin, rho::rho_method};
 
-/// 200以下の素数一覧
-const FACTOR_BASE: [u64; 46] = [
-    2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
-    101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193,
-    197, 199,
-];
+/// 素数一覧
+static FACTOR_BASE: LazyLock<Vec<u64>> = LazyLock::new(|| {
+    let primes = primes_leq(10000);
+    println!("primes = {:?}", primes);
+    primes
+});
+
+/// 素数生成
+fn primes_leq(limit: u64) -> Vec<u64> {
+    let mut primes = Vec::new();
+
+    'outer: for x in 2..=limit {
+        for &p in &primes {
+            if p * p > x {
+                break;
+            }
+
+            if x % p == 0 {
+                continue 'outer;
+            }
+        }
+
+        primes.push(x);
+    }
+
+    primes
+}
 
 fn prime_factorize(n: &BigInt, rng: &mut impl Rng) -> Vec<BigInt> {
     let one = BigInt::one();
@@ -233,49 +256,61 @@ fn extract_factor(n: &BigInt, x: &BigInt, y: &BigInt) -> Option<BigInt> {
     None
 }
 
+fn divide_over_factor_base(qx: &BigInt) -> Option<(Vec<u32>, Vec<u8>)> {
+    if qx.is_zero() {
+        return None;
+    }
+
+    // exponents[0] は -1 用.
+    let mut exponents = vec![0_u32; FACTOR_BASE.len() + 1];
+
+    let mut rem = if qx.is_negative() {
+        exponents[0] = 1;
+        -qx.clone()
+    } else {
+        qx.clone()
+    };
+
+    for (i, &p) in FACTOR_BASE.iter().enumerate() {
+        let p_big = BigInt::from(p);
+        let mut e = 0_u32;
+
+        while (&rem % &p_big).is_zero() {
+            rem /= &p_big;
+            e += 1;
+        }
+
+        exponents[i + 1] = e;
+    }
+
+    if rem != BigInt::one() {
+        return None;
+    }
+
+    let parity = exponents.iter().map(|e| (e & 1) as u8).collect::<Vec<_>>();
+
+    Some((exponents, parity))
+}
+
 pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt {
     // 2次ふるい法
     //　因数分解したい数をn
     let m = n.sqrt();
-    let x = -x_range..x_range;
-    let factors_iter = x
+    let factors_vec = (-x_range..x_range)
         .filter_map(|x| {
             let x_tilde = x + &m;
             let qx: BigInt = &x_tilde * &x_tilde - n;
 
-            if qx.is_zero() {
-                // 素因子がないものは必要ないので省く
-                return None;
-            }
+            let (exponents, parity) = divide_over_factor_base(&qx)?;
 
-            // 負の数だったら，因数に-1を追加するため．
-            let mut factors = Vec::new();
-            let is_negative = qx.is_negative();
-            let qx_abs = if is_negative {
-                factors.push(BigInt::from(-1));
-                -qx
-            } else {
-                qx
-            };
-
-            factors.extend(prime_factorize(&qx_abs, rng));
-
-            Some((x, if is_negative { -qx_abs } else { qx_abs }, factors))
-        })
-        // 200以下の素因子を持つものに絞る
-        .filter(|v| v.2.iter().all(|f| *f <= BigInt::from(200)));
-    let factors_vec = factors_iter
-        .filter_map(|(x, qz, f)| {
-            let (exponents, parity) = factors_to_vectors(&f)?;
             Some(Relation {
                 x,
-                qx: qz,
+                qx,
                 exponents,
                 parity,
             })
         })
         .collect::<Vec<_>>();
-
     let parities = factors_vec
         .iter()
         .map(|rel| rel.parity.clone())
