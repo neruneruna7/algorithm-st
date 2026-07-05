@@ -13,11 +13,15 @@ pub fn brent_factor<F>(n: i128, x0: i128, m: i128, f: F) -> Option<i128>
 where
     F: Fn(i128) -> i128,
 {
+    // nが1以下なら因数分解できない
+    // m が 0 以下ならブロックサイズが不正
+    // x0 が 0 未満または n 以上なら初期値が不正
     if n <= 1 || m <= 0 || x0 < 0 || x0 > n {
         return None;
     }
 
-    // 偶数は即座に処理する。
+    // 偶数は即座に処理する
+    // 因数が2で確定する．
     if n % 2 == 0 {
         return if n == 2 { None } else { Some(2) };
     }
@@ -91,6 +95,8 @@ fn gcd(mut a: i128, mut b: i128) -> i128 {
     a
 }
 
+/// 剰余を計算する
+/// ただし，剰余が負の数の場合はnを法とした正の整数にする．
 fn mod_norm(x: i128, n: i128) -> i128 {
     let r = x % n;
     if r < 0 { r + n } else { r }

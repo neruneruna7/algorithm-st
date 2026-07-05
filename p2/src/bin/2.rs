@@ -1,12 +1,12 @@
 use num_bigint::BigInt;
 
 use num_integer::Integer as _;
-use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
+use num_traits::Zero as _;
 use p2::{
     miller_rabin::miller_rabin,
     rho::{brent_factor, mul_mod},
 };
-use rand::{Rng, SeedableRng as _, rngs::SmallRng};
+use rand::{SeedableRng as _, rngs::SmallRng};
 
 fn main() {
     let n: i128 = 11629360743077306442685712558623; // 8051 = 83 * 97
@@ -15,7 +15,6 @@ fn main() {
 
     let factor = brent_factor(n, x0, m, |x| {
         // x^2 + 1 mod n
-
         (mul_mod(x, x, n) + 1) % n
     });
     println!("rho = {factor:?}");
