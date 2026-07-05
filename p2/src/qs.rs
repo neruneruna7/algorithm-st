@@ -87,11 +87,89 @@ struct Relation {
     parity: Vec<u8>,
 }
 
-pub fn quadratic_sieve1(n: &BigInt, rng: &mut impl Rng) -> BigInt {
+#[derive(Debug, Clone)]
+struct GF2Row {
+    bits: Vec<u8>,
+    combo: Vec<u8>,
+}
+
+fn find_dependencies_gf2(parities: &[Vec<u8>]) -> Vec<Vec<usize>> {
+    let row_count = parities.len();
+
+    if row_count == 0 {
+        return Vec::new();
+    }
+
+    let col_count = parities[0].len();
+
+    let mut rows = parities
+        .iter()
+        .enumerate()
+        .map(|(i, parity)| {
+            let mut combo = vec![0_u8; row_count];
+            combo[i] = 1;
+
+            GF2Row {
+                bits: parity.clone(),
+                combo,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let mut pivot_row = 0;
+
+    for col in 0..col_count {
+        let pivot = (pivot_row..row_count).find(|&r| rows[r].bits[col] == 1);
+
+        let Some(pivot) = pivot else {
+            continue;
+        };
+
+        rows.swap(pivot_row, pivot);
+
+        for r in 0..row_count {
+            if r != pivot_row && rows[r].bits[col] == 1 {
+                for c in col..col_count {
+                    rows[r].bits[c] ^= rows[pivot_row].bits[c];
+                }
+
+                for k in 0..row_count {
+                    rows[r].combo[k] ^= rows[pivot_row].combo[k];
+                }
+            }
+        }
+
+        pivot_row += 1;
+
+        if pivot_row == row_count {
+            break;
+        }
+    }
+
+    rows.into_iter()
+        .filter(|row| row.bits.iter().all(|&b| b == 0))
+        .filter_map(|row| {
+            let indices = row
+                .combo
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &b)| if b == 1 { Some(i) } else { None })
+                .collect::<Vec<_>>();
+
+            if indices.is_empty() {
+                None
+            } else {
+                Some(indices)
+            }
+        })
+        .collect()
+}
+
+pub fn quadratic_sieve1(n: &BigInt, x_range: i32, rng: &mut impl Rng) -> BigInt {
     // 2次ふるい法
     //　因数分解したい数をn
     let m = n.sqrt();
-    let x = -8000..8000;
+    let x = -x_range..x_range;
     let factors_iter = x
         .filter_map(|x| {
             let x_tilde = x + &m;
@@ -130,9 +208,25 @@ pub fn quadratic_sieve1(n: &BigInt, rng: &mut impl Rng) -> BigInt {
         })
         .collect::<Vec<_>>();
 
-    factors_vec.iter().for_each(|i| {
-        println!("{:?}", i);
-    });
+    let parities = factors_vec
+        .iter()
+        .map(|rel| rel.parity.clone())
+        .collect::<Vec<_>>();
+
+    let column_count = FACTOR_BASE.len() + 1;
+
+    println!("relations={}, columns={}", factors_vec.len(), column_count);
+
+    if factors_vec.len() <= column_count {
+        panic!("not enough relations");
+    }
+    let dependencies = find_dependencies_gf2(&parities);
+
+    println!("dependencies = {:?}", dependencies);
+
+    // factors_vec.iter().for_each(|i| {
+    //     println!("{:?}", i);
+    // });
 
     // factors_iter.for_each(|(x, qx, factors)| {
     //     println!("factors: x={} qx={:?} factors={:?}", x, qx, factors);

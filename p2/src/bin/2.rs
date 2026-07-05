@@ -20,7 +20,7 @@ fn main() {
     // work();
     let mut rng = SmallRng::seed_from_u64(1);
 
-    quadratic_sieve1(&q, &mut rng);
+    quadratic_sieve1(&q, 80000, &mut rng);
     let _grotaan = BigInt::from(57);
     // let factors = prime_factorize(&q, &mut SmallRng::seed_from_u64(48));
     // let factors = quadratic_sieve(&q, 2000, 80000);
