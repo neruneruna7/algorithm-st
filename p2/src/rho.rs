@@ -1,5 +1,13 @@
 /// Brent による Pollard rho 型の因数発見アルゴリズム。
-///
+pub fn pollard_rho(n: i128) -> Option<i128> {
+    let x0: i128 = 2;
+    let m: i128 = 16;
+    brent_factor(n, x0, m, |x| {
+        // x^2 + 1 mod n
+        (mul_mod(x, x, n) + 1) % n
+    })
+}
+
 /// 入力:
 /// - n: 素因数分解対象の正整数
 /// - x0: 初期値。0 <= x0 <= n を想定
