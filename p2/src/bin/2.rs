@@ -4,7 +4,7 @@ use num_integer::Integer as _;
 use num_traits::{One as _, Signed as _, ToPrimitive as _, Zero as _};
 use p2::{
     miller_rabin::miller_rabin,
-    rho3::{brent_factor, mul_mod},
+    rho::{brent_factor, mul_mod},
 };
 use rand::{Rng, SeedableRng as _, rngs::SmallRng};
 
