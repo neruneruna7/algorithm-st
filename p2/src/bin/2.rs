@@ -32,6 +32,7 @@ fn prime_factorize(n: i128) -> Vec<i128> {
     }
 
     let mut rng = SmallRng::seed_from_u64(1);
+
     // スタック型で管理して，木構造の再帰的な処理を行う．
     while let Some(n) = stack.pop() {
         if n == 1 {

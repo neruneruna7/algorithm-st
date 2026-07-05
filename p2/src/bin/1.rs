@@ -16,16 +16,6 @@ fn main() {
     let one_five_hundred = BigInt::from_str_radix(&one_five_hundred_str, 10).unwrap();
     println!("1が500個並んでいるはず: \n{}", one_five_hundred);
     // 素数が見つかるまで
-    // let mut rng = rand::thread_rng();
-
-    // let mut i = BigInt::zero();
-    // let prime_num = loop {
-    //     let current_num = &one_five_hundred + &i;
-    //     if miller_rabin(current_num.clone(), 20, &mut rng) == true {
-    //         break current_num;
-    //     }
-    //     i += BigInt::one();
-    // };
     let start = Instant::now();
 
     let prime_num = find_prime_parallel(one_five_hundred, 20);
@@ -34,11 +24,9 @@ fn main() {
     println!("prime = {prime_num}");
     println!("elapsed = {:?}", elapsed);
     println!("elapsed_sec = {:.6}", elapsed.as_secs_f64());
-    // let mut rng = SmallRng::from_entropy();
-    // let check = miller_rabin(prime_num.clone(), 1000, &mut rng);
-    // println!("素数かどうか再度チェック: {}", check);
 }
 
+/// n以上の最小の奇数候補
 fn first_odd_at_least(n: BigInt) -> BigInt {
     let two = BigInt::from(2_u32);
 
