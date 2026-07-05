@@ -1,133 +1,133 @@
-use num_traits::{Zero as _, abs};
-use rand::Rng;
-
-fn gcd(x: i128, y: i128) -> i128 {
-    let mut a = abs(x);
-    let mut b = abs(y);
-    while !b.is_zero() {
-        let r = &a % &b;
-        a = b;
-        b = r;
-    }
-    a
-}
-fn g(x: i128, c: i128, n: i128) -> i128 {
-    (x * x + c) % n
-}
-
-pub fn rho_method(n: i128, rng: &mut impl Rng) -> Option<i128> {
-    if n <= i128::from(3_u32) {
+/// Brent による Pollard rho 型の因数発見アルゴリズム。
+///
+/// 入力:
+/// - n: 素因数分解対象の正整数
+/// - x0: 初期値。0 <= x0 <= n を想定
+/// - m: ブロックサイズ。m > 0
+/// - f: n を法とする擬似乱数発生関数
+///
+/// 出力:
+/// - Some(d): n の自明でない約数 d
+/// - None: 失敗，または入力が不正
+pub fn brent_factor<F>(n: i128, x0: i128, m: i128, f: F) -> Option<i128>
+where
+    F: Fn(i128) -> i128,
+{
+    if n <= 1 || m <= 0 || x0 < 0 || x0 > n {
         return None;
     }
 
-    if (n % 2).is_zero() {
-        return Some(2);
+    // 偶数は即座に処理する。
+    if n % 2 == 0 {
+        return if n == 2 { None } else { Some(2) };
     }
-    for _ in 0..64 {
-        let c = rng.gen_range(1..n);
-        let mut x = rng.gen_range(2..n);
-        let mut y = x;
 
-        let mut count = 0;
+    let mut y = mod_norm(x0, n);
+    let mut r: i128 = 1;
+    let mut q: i128 = 1;
+    let mut g: i128 = 1;
+
+    // g = n になったときの後退探索で使う。
+    let mut x: i128 = y;
+    let mut ys: i128 = y;
+
+    while g == 1 {
+        x = y;
+
+        for _ in 0..r {
+            y = mod_norm(f(y), n);
+        }
+
+        let mut k: i128 = 0;
+
+        while k < r && g == 1 {
+            ys = y;
+
+            let limit = std::cmp::min(m, r - k);
+
+            for _ in 0..limit {
+                y = mod_norm(f(y), n);
+                let diff = abs_i128(x - y);
+                q = mul_mod(q, diff, n);
+            }
+
+            g = gcd(q, n);
+            k += m;
+        }
+
+        // r ← 2r
+        r = match r.checked_mul(2) {
+            Some(v) => v,
+            None => return None,
+        };
+    }
+
+    // g = n の場合，積 q にまとめたどこかで失敗しているので，
+    // ys から 1 ステップずつ戻して単独の gcd を調べる。
+    if g == n {
         loop {
-            count += 1;
-            if count % 1000 == 0 {
-                println!("count = {count}");
-            }
+            ys = mod_norm(f(ys), n);
+            g = gcd(abs_i128(x - ys), n);
 
-            x = g(x, c, n);
-            y = g(g(y, c, n), c, n);
-
-            let d = gcd(abs(x - y), n);
-
-            if d > 1 && d < n {
-                return Some(d);
-            }
-
-            if d == n {
+            if g > 1 {
                 break;
             }
         }
     }
 
-    None
+    if g == n { None } else { Some(g) }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::{SeedableRng as _, rngs::SmallRng};
+fn gcd(mut a: i128, mut b: i128) -> i128 {
+    a = abs_i128(a);
+    b = abs_i128(b);
 
-    fn assert_nontrivial_factor(n: i128, d: i128) {
-        assert!(d > 1, "factor must be > 1: d = {d}");
-        assert!(d < n, "factor must be < n: d = {d}, n = {n}");
-        assert!((n % d).is_zero(), "d must divide n: d = {d}, n = {n}");
+    while b != 0 {
+        let r = a % b;
+        a = b;
+        b = r;
     }
 
-    #[test]
-    fn rho_returns_none_for_too_small_inputs() {
-        let mut rng = SmallRng::seed_from_u64(1);
+    a
+}
 
-        assert_eq!(rho_method(-10, &mut rng), None);
-        assert_eq!(rho_method(-1, &mut rng), None);
-        assert_eq!(rho_method(0, &mut rng), None);
-        assert_eq!(rho_method(1, &mut rng), None);
-    }
+fn mod_norm(x: i128, n: i128) -> i128 {
+    let r = x % n;
+    if r < 0 { r + n } else { r }
+}
 
-    #[test]
-    fn rho_returns_two_for_even_composites() {
-        let mut rng = SmallRng::seed_from_u64(2);
+/// i128 の範囲内で安全に絶対値を取る。
+/// このアルゴリズムでは x, y は 0 <= x,y < n を維持するため，
+/// x - y が i128::MIN になるケースは通常想定しない。
+fn abs_i128(x: i128) -> i128 {
+    if x < 0 { -x } else { x }
+}
 
-        for n in [4, 6, 8, 10, 100, 1024, 1_000_000] {
-            let d = rho_method(n, &mut rng).expect("rho should find factor 2");
+/// (a * b) mod n をオーバーフローせずに計算する。
+///
+/// a,b,n は非負，n > 0 を想定する。
+pub fn mul_mod(mut a: i128, mut b: i128, n: i128) -> i128 {
+    a = mod_norm(a, n);
+    b = mod_norm(b, n);
 
-            assert_eq!(d, 2);
-            assert_nontrivial_factor(n, d);
+    let mut result: i128 = 0;
+
+    while b > 0 {
+        if b & 1 == 1 {
+            result = add_mod(result, a, n);
         }
+
+        a = add_mod(a, a, n);
+        b >>= 1;
     }
 
-    #[test]
-    fn rho_finds_factor_of_small_semiprime() {
-        let mut rng = SmallRng::seed_from_u64(3);
+    result
+}
 
-        let n = 91; // 7 * 13
-        let d = rho_method(n, &mut rng).expect("rho should find a factor");
-
-        assert_nontrivial_factor(n, d);
-        assert!(d == 7 || d == 13);
-    }
-
-    #[test]
-    fn rho_finds_factor_of_another_small_semiprime() {
-        let mut rng = SmallRng::seed_from_u64(4);
-
-        let n = 8051; // 83 * 97
-        let d = rho_method(n, &mut rng).expect("rho should find a factor");
-
-        assert_nontrivial_factor(n, d);
-        assert!(d == 83 || d == 97);
-    }
-
-    #[test]
-    fn rho_returns_nontrivial_factor_not_necessarily_prime() {
-        let mut rng = SmallRng::seed_from_u64(5);
-
-        let n = 3 * 5 * 7 * 11;
-        let d = rho_method(n, &mut rng).expect("rho should find a factor");
-
-        assert_nontrivial_factor(n, d);
-    }
-    // #[test]
-    // fn rho_finds_factor_of_slide_semiprime() {
-    //     let mut rng = SmallRng::seed_from_u64(6);
-
-    //     let p = i128::parse_bytes(b"92429849809837999", 10).unwrap();
-    //     let q = i128::parse_bytes(b"98943752524593761", 10).unwrap();
-    //     let n = &p * &q;
-
-    //     let d = rho_method(&n, &mut rng).expect("rho should find a factor");
-
-    //     assert_nontrivial_factor(&n, &d);
-    //     assert!(d == p || d == q);
-    // }
+/// (a + b) mod n をオーバーフローしにくい形で計算する。
+///
+/// 0 <= a,b < n を想定する。
+fn add_mod(a: i128, b: i128, n: i128) -> i128 {
+    // a + b >= n を，a >= n - b と同値にして加算前に判定する。
+    if a >= n - b { a - (n - b) } else { a + b }
 }
