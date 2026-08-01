@@ -1193,6 +1193,9 @@ dependencies = [
 [[package]]
 name = "p3"
 version = "0.1.0"
+dependencies = [
+ "rayon",
+]
 
 [[package]]
 name = "parking_lot"
