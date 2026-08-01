@@ -1,5 +1,9 @@
 use std::fmt::Display;
 
+use rayon::iter::{
+    IndexedParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _,
+};
+
 fn main() {
     println!("Hello, world!");
     let input = (true, false, true, false);
@@ -7,8 +11,8 @@ fn main() {
     println!("{:?}", output);
 
     // let input_bitonic = None;
-    //
-    let harf_cleaner_input = Bitonic(vec![false, false, false, true, true, true, false, false]);
+    let harf_cleaner_input =
+        Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
     let half_cleaner_output = half_cleaner(harf_cleaner_input);
     println!("{}", half_cleaner_output);
 }
@@ -55,18 +59,16 @@ impl Bitonic {
 fn half_cleaner(input: Bitonic) -> Bitonic {
     let length = input.0.len();
     let mid_point = length / 2;
-    let left = input.0[..mid_point].to_vec();
-    let right = input.0[mid_point..].to_vec();
-    let bitonic_out = left
-        .into_iter()
-        .zip(right)
-        .map(|(x, y)| comparator(x, y))
-        .enumerate()
-        .fold(vec![false; length], |mut acc, (i, (x, y))| {
-            acc[i] = x;
-            acc[i + mid_point] = y;
-            acc
-        });
+    let (left, right) = input.0.split_at(mid_point);
 
+    let (left_out, right_out): (Vec<bool>, Vec<bool>) = left
+        .par_iter()
+        .zip(right.par_iter())
+        .map(|(&x, &y)| comparator(x, y))
+        .unzip();
+    let bitonic_out = left_out.into_iter().chain(right_out).collect();
+    // 入力と同じであることが保証されているので，再度バリデーションは不要
     Bitonic(bitonic_out)
 }
+
+
