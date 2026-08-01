@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
 use rayon::iter::{
-    IndexedParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _,
+    IndexedParallelIterator as _, IntoParallelIterator, IntoParallelRefIterator as _,
+    ParallelIterator as _,
 };
 
 fn main() {
@@ -15,6 +16,11 @@ fn main() {
         Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
     let half_cleaner_output = half_cleaner(harf_cleaner_input);
     println!("{}", half_cleaner_output);
+
+    let input_bitonic =
+        Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
+    let bitonic_out = bitonic_sorter(input_bitonic);
+    println!("{}", bitonic_out);
 }
 
 /// 左を上，右を下とみなす．
@@ -58,8 +64,8 @@ impl Bitonic {
 
 fn half_cleaner(input: Bitonic) -> Bitonic {
     let length = input.0.len();
-    let mid_point = length / 2;
-    let (left, right) = input.0.split_at(mid_point);
+    let half_length = length / 2;
+    let (left, right) = input.0.split_at(half_length);
 
     let (left_out, right_out): (Vec<bool>, Vec<bool>) = left
         .par_iter()
@@ -71,4 +77,25 @@ fn half_cleaner(input: Bitonic) -> Bitonic {
     Bitonic(bitonic_out)
 }
 
+fn bitonic_sorter(input: Bitonic) -> Bitonic {
+    // println!("process: {}", input);
+    let half_length = input.0.len() / 2;
+    if half_length < 1 {
+        return input;
+    }
+    let cleaned = half_cleaner(input);
+    // println!("cleaned: {}", cleaned);
 
+    let (left, right) = cleaned.0.split_at(half_length);
+    let left = Bitonic(left.to_vec());
+    let right = Bitonic(right.to_vec());
+    // println!("left: {}, right: {}", left, right);
+    let out = rayon::join(|| bitonic_sorter(left), || bitonic_sorter(right));
+
+    // println!("join: {} {}", out.0, out.1);
+
+    let bitonic_out = out.0.0.into_iter().chain(out.1.0).collect();
+    let bitonic_out = Bitonic(bitonic_out);
+
+    bitonic_out
+}
