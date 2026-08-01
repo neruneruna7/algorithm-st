@@ -5,7 +5,7 @@ edition = "2024"
 
 [workspace]
 members = [
-    ".", "p2",
+    ".", "p2", "p3",
     "ram-lsp",
     "ram-syntax"
 ]
