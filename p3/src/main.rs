@@ -6,21 +6,34 @@ use rayon::iter::{
 };
 
 fn main() {
-    println!("Hello, world!");
-    let input = (true, false, true, false);
-    let output = sorting_network_4(input);
-    println!("{:?}", output);
+    let input_bitonic = Bitonic::new(generate_bitonic(4096)).unwrap();
 
-    // let input_bitonic = None;
-    let harf_cleaner_input =
-        Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
-    let half_cleaner_output = half_cleaner(harf_cleaner_input);
-    println!("{}", half_cleaner_output);
-
-    let input_bitonic =
-        Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
+    let start = std::time::Instant::now();
     let bitonic_out = bitonic_sorter(input_bitonic);
-    println!("{}", bitonic_out);
+    let end = std::time::Instant::now();
+    // ソートされているか確認
+    assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
+
+    println!("bitonic time: {:?}", (end - start));
+
+    // 通常ソート
+    let start_normal = std::time::Instant::now();
+    let mut normal_out = bitonic_out.0.clone().into_iter().collect::<Vec<_>>();
+    normal_out.sort();
+    let end_normal = std::time::Instant::now();
+
+    println!("normal time: {:?}", (end_normal - start_normal));
+}
+
+fn generate_bitonic(len: usize) -> Vec<bool> {
+    if len == 0 {
+        return Vec::new();
+    }
+
+    let rise = len / 4;
+    let fall = len * 3 / 4;
+
+    (0..len).map(|i| i >= rise && i < fall).collect()
 }
 
 /// 左を上，右を下とみなす．
@@ -98,4 +111,25 @@ fn bitonic_sorter(input: Bitonic) -> Bitonic {
     let bitonic_out = Bitonic(bitonic_out);
 
     bitonic_out
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_sorting_network_and_half_cleaner() {
+        let input = (true, false, true, false);
+        let output = sorting_network_4(input);
+        assert_eq!(output, (true, true, false, false));
+
+        let half_cleaner_input =
+            Bitonic::new(vec![false, false, false, true, true, true, false, false]).unwrap();
+        let half_cleaner_output = half_cleaner(half_cleaner_input);
+        assert_eq!(
+            half_cleaner_output.0,
+            vec![true, true, false, true, false, false, false, false]
+        );
+    }
 }
