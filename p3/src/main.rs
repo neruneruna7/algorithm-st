@@ -2,11 +2,9 @@ use std::fmt::Display;
 
 use rayon::prelude::*;
 
-const COMPARATOR_CHUNK_SIZE: usize = 1024;
-
 fn main() {
-    // let input = generate_bitonic(1048576);
-    let input = generate_bitonic(33554432);
+    let input = generate_bitonic(1048576);
+    // let input = generate_bitonic(33554432);
     // let input = generate_bitonic(1073741824);
 
     rayon::ThreadPoolBuilder::new().build_global().unwrap();
@@ -28,6 +26,12 @@ fn main() {
     assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
     println!("bitonic single time: {bitonic_time:?}");
 
+    let start = std::time::Instant::now();
+    let bitonic_out = bitonic_sorter_single2(Bitonic::new(input.clone()).unwrap());
+    let bitonic_time = start.elapsed();
+    assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
+    println!("bitonic single2 time: {bitonic_time:?}");
+
     // 通常ソート
     let start = std::time::Instant::now();
     let mut normal_out = input.clone();
@@ -43,12 +47,12 @@ fn main() {
     // assert!(insertion_out.is_sorted_by(|a, b| a >= b));
     // println!("insertion sort time: {insertion_time:?}");
 
-    // let start = std::time::Instant::now();
-    // let mut merge_out = input.clone();
-    // merge_sort(&mut merge_out);
-    // let merge_time = start.elapsed();
-    // assert!(merge_out.is_sorted_by(|a, b| a >= b));
-    // println!("merge sort time: {merge_time:?}");
+    let start = std::time::Instant::now();
+    let mut merge_out = input.clone();
+    merge_sort(&mut merge_out);
+    let merge_time = start.elapsed();
+    assert!(merge_out.is_sorted_by(|a, b| a >= b));
+    println!("merge sort time: {merge_time:?}");
 }
 
 fn generate_bitonic(len: usize) -> Vec<bool> {
@@ -170,8 +174,39 @@ fn half_cleaner_slice(input: &mut [bool]) {
     }
 }
 
+#[inline(always)]
 fn comparator_mut(x: &mut bool, y: &mut bool) {
     (*x, *y) = (*x || *y, *x && *y);
+}
+
+#[inline(always)]
+fn clean_task_raw(task: &mut [bool], block_size: usize, half_length: usize) {
+    debug_assert!(task.len().is_multiple_of(block_size));
+
+    let ptr = task.as_mut_ptr();
+    let mut block_start = 0;
+
+    while block_start < task.len() {
+        // SAFETY: block_start is a block boundary, and task is a multiple of
+        // block_size. Each block's left and right halves are disjoint and in bounds.
+        unsafe {
+            let mut left = ptr.add(block_start);
+            let mut right = left.add(half_length);
+
+            for _ in 0..half_length {
+                let x = *left;
+                let y = *right;
+
+                *left = x || y;
+                *right = x && y;
+
+                left = left.add(1);
+                right = right.add(1);
+            }
+        }
+
+        block_start += block_size;
+    }
 }
 
 fn bitonic_sorter_single(mut input: Bitonic) -> Bitonic {
@@ -186,6 +221,44 @@ fn bitonic_sorter_single(mut input: Bitonic) -> Bitonic {
 
         block_size /= 2;
     }
+
+    input
+}
+
+fn bitonic_sorter_single2(mut input: Bitonic) -> Bitonic {
+    let len = input.0.len();
+    if len < 2 {
+        return input;
+    }
+
+    // 最終段付近を一つのタスクに融合し、段ごとの同期・タスク起動を減らす。
+    // タスク数はスレッド数の4倍を目標にする。ブロックサイズは2の冪に保つ。
+    let target_task_count = rayon::current_num_threads().saturating_mul(4);
+    let task_size = (len / target_task_count.max(1)).max(1);
+    let next_power = task_size.next_power_of_two();
+    let local_sort_size = if next_power > task_size {
+        next_power / 2
+    } else {
+        next_power
+    };
+
+    let mut block_size = len;
+    while block_size > local_sort_size {
+        let half_length = block_size / 2;
+        input
+            .0
+            .par_chunks_mut(block_size)
+            .for_each(|task| clean_task_raw(task, block_size, half_length));
+        block_size /= 2;
+    }
+
+    input.0.par_chunks_mut(local_sort_size).for_each(|task| {
+        let mut block_size = local_sort_size;
+        while block_size >= 2 {
+            clean_task_raw(task, block_size, block_size / 2);
+            block_size /= 2;
+        }
+    });
 
     input
 }
@@ -327,10 +400,42 @@ mod test {
         for exponent in 0..=10 {
             let input = generate_bitonic(1 << exponent);
             let true_count = input.iter().filter(|&&value| value).count();
-            let output = bitonic_sorter_par(Bitonic::new(input).unwrap()).0;
+            let output = bitonic_sorter_single2(Bitonic::new(input).unwrap()).0;
 
             assert!(output.is_sorted_by(|a, b| a >= b));
             assert_eq!(output.iter().filter(|&&value| value).count(), true_count);
         }
+    }
+
+    #[test]
+    fn test_bitonic_sorter_for_all_small_bitonic_inputs() {
+        for exponent in 0..=4 {
+            let len = 1 << exponent;
+            for mask in 0..(1usize << len) {
+                let input: Vec<bool> = (0..len).map(|index| mask & (1 << index) != 0).collect();
+                if !is_bitonic(&input) {
+                    continue;
+                }
+
+                let mut expected = input.clone();
+                expected.sort_by(|left, right| right.cmp(left));
+                let output = bitonic_sorter_single2(Bitonic::new(input).unwrap()).0;
+                assert_eq!(output, expected);
+            }
+        }
+    }
+
+    fn is_bitonic(input: &[bool]) -> bool {
+        let mut decreasing = false;
+        for pair in input.windows(2) {
+            if !pair[0] && pair[1] {
+                if decreasing {
+                    return false;
+                }
+            } else if pair[0] && !pair[1] {
+                decreasing = true;
+            }
+        }
+        true
     }
 }
