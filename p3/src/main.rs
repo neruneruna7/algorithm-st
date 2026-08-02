@@ -22,19 +22,19 @@ fn main() {
     assert!(normal_out.is_sorted_by(|a, b| a >= b));
     println!("normal time: {normal_time:?}");
 
-    let start = std::time::Instant::now();
-    let mut insertion_out = input.clone();
-    insertion_sort(&mut insertion_out);
-    let insertion_time = start.elapsed();
-    assert!(insertion_out.is_sorted_by(|a, b| a >= b));
-    println!("insertion sort time: {insertion_time:?}");
+    // let start = std::time::Instant::now();
+    // let mut insertion_out = input.clone();
+    // insertion_sort(&mut insertion_out);
+    // let insertion_time = start.elapsed();
+    // assert!(insertion_out.is_sorted_by(|a, b| a >= b));
+    // println!("insertion sort time: {insertion_time:?}");
 
-    let start = std::time::Instant::now();
-    let mut merge_out = input.clone();
-    merge_sort(&mut merge_out);
-    let merge_time = start.elapsed();
-    assert!(merge_out.is_sorted_by(|a, b| a >= b));
-    println!("merge sort time: {merge_time:?}");
+    // let start = std::time::Instant::now();
+    // let mut merge_out = input.clone();
+    // merge_sort(&mut merge_out);
+    // let merge_time = start.elapsed();
+    // assert!(merge_out.is_sorted_by(|a, b| a >= b));
+    // println!("merge sort time: {merge_time:?}");
 }
 
 fn generate_bitonic(len: usize) -> Vec<bool> {
@@ -50,7 +50,9 @@ fn generate_bitonic(len: usize) -> Vec<bool> {
 
 /// 左を上，右を下とみなす．
 fn comparator(x: bool, y: bool) -> (bool, bool) {
-    if x > y { (x, y) } else { (y, x) }
+    let max = x || y;
+    let min = x && y;
+    (max, min)
 }
 
 fn sorting_network_4(input: (bool, bool, bool, bool)) -> (bool, bool, bool, bool) {
@@ -145,28 +147,58 @@ fn half_cleaner(input: Bitonic) -> Bitonic {
     Bitonic(bitonic_out)
 }
 
-fn bitonic_sorter(input: Bitonic) -> Bitonic {
-    // println!("process: {}", input);
-    let half_length = input.0.len() / 2;
-    if half_length < 1 {
-        return input;
+use rayon::prelude::*;
+
+fn half_cleaner_slice(input: &mut [bool]) {
+    let half_length = input.len() / 2;
+    let (left, right) = input.split_at_mut(half_length);
+
+    for (x, y) in left.iter_mut().zip(right.iter_mut()) {
+        println!("count");
+        (*x, *y) = comparator(*x, *y);
     }
-    let cleaned = half_cleaner(input);
-    // println!("cleaned: {}", cleaned);
-
-    let (left, right) = cleaned.0.split_at(half_length);
-    let left = Bitonic(left.to_vec());
-    let right = Bitonic(right.to_vec());
-    // println!("left: {}, right: {}", left, right);
-    let out = rayon::join(|| bitonic_sorter(left), || bitonic_sorter(right));
-
-    // println!("join: {} {}", out.0, out.1);
-
-    let bitonic_out = out.0.0.into_iter().chain(out.1.0).collect();
-    let bitonic_out = Bitonic(bitonic_out);
-
-    bitonic_out
 }
+
+fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
+    let mut block_size = input.0.len();
+
+    while block_size >= 2 {
+        input.0.par_chunks_mut(block_size).for_each(|block| {
+            let half = block.len() / 2;
+            let (left, right) = block.split_at_mut(half);
+
+            for (x, y) in left.iter_mut().zip(right.iter_mut()) {
+                (*x, *y) = comparator(*x, *y);
+            }
+        });
+
+        block_size /= 2;
+    }
+
+    input
+}
+// fn bitonic_sorter(input: Bitonic) -> Bitonic {
+//     // println!("process: {}", input);
+//     let half_length = input.0.len() / 2;
+//     if half_length < 1 {
+//         return input;
+//     }
+//     let cleaned = half_cleaner(input);
+//     // println!("cleaned: {}", cleaned);
+
+//     let (left, right) = cleaned.0.split_at(half_length);
+//     let left = Bitonic(left.to_vec());
+//     let right = Bitonic(right.to_vec());
+//     // println!("left: {}, right: {}", left, right);
+//     let out = rayon::join(|| bitonic_sorter(left), || bitonic_sorter(right));
+
+//     // println!("join: {} {}", out.0, out.1);
+
+//     let bitonic_out = out.0.0.into_iter().chain(out.1.0).collect();
+//     let bitonic_out = Bitonic(bitonic_out);
+
+//     bitonic_out
+// }
 
 #[cfg(test)]
 mod test {
