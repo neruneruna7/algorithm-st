@@ -7,7 +7,7 @@ const COMPARATOR_CHUNK_SIZE: usize = 1024;
 fn main() {
     // let input = generate_bitonic(1048576);
     let input = generate_bitonic(33554432);
-    let input = generate_bitonic(1073741824);
+    // let input = generate_bitonic(1073741824);
 
     rayon::ThreadPoolBuilder::new().build_global().unwrap();
     // let start = std::time::Instant::now();
@@ -161,124 +161,23 @@ fn half_cleaner(input: Bitonic) -> Bitonic {
     Bitonic(bitonic_out)
 }
 
-#[derive(Debug, Clone, Copy)]
-struct ComparatorOp {
-    left: usize,
-    right: usize,
-}
-
-fn stage_comparators(len: usize, block_size: usize) -> impl Iterator<Item = ComparatorOp> {
-    debug_assert!(block_size >= 2);
-    debug_assert!(block_size.is_power_of_two());
-    debug_assert!(len.is_multiple_of(block_size));
-
-    let half = block_size / 2;
-
-    (0..len).step_by(block_size).flat_map(move |block_start| {
-        (0..half).map(move |offset| ComparatorOp {
-            left: block_start + offset,
-            right: block_start + half + offset,
-        })
-    })
-}
-
-#[derive(Clone, Copy)]
-struct StageBuffer {
-    ptr: std::ptr::NonNull<bool>,
-    len: usize,
-}
-
-// StageBufferはsafeな可変アクセスAPIを持たない。
-// 同一Stage内でComparatorのアクセス先が重複しないことを呼び出し側が保証する。
-unsafe impl Sync for StageBuffer {}
-
-impl StageBuffer {
-    fn new(slice: &mut [bool]) -> Self {
-        Self {
-            ptr: std::ptr::NonNull::new(slice.as_mut_ptr()).expect("slice pointer is non-null"),
-            len: slice.len(),
-        }
-    }
-
-    unsafe fn execute(&self, op: ComparatorOp) {
-        debug_assert!(op.left < self.len);
-        debug_assert!(op.right < self.len);
-        debug_assert_ne!(op.left, op.right);
-
-        let ptr = self.ptr.as_ptr();
-        let (x, y) = unsafe { (*ptr.add(op.left), *ptr.add(op.right)) };
-        let (x, y) = comparator(x, y);
-
-        unsafe {
-            *ptr.add(op.left) = x;
-            *ptr.add(op.right) = y;
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-fn validate_stage(len: usize, operations: &[ComparatorOp]) {
-    let mut used = vec![false; len];
-
-    for op in operations {
-        assert!(op.left < len);
-        assert!(op.right < len);
-        assert_ne!(op.left, op.right);
-        assert!(!used[op.left]);
-        assert!(!used[op.right]);
-
-        used[op.left] = true;
-        used[op.right] = true;
-    }
-}
-
-fn execute_stage(input: &mut [bool], block_size: usize) {
-    let operations: Vec<_> = stage_comparators(input.len(), block_size).collect();
-
-    let op_length = operations.len();
-    let chunk_size = op_length / 4;
-    let chunk_size = std::cmp::max(chunk_size, COMPARATOR_CHUNK_SIZE);
-    #[cfg(debug_assertions)]
-    validate_stage(input.len(), &operations);
-
-    let buffer = StageBuffer::new(input);
-
-    operations.par_chunks(chunk_size).for_each(|chunk| {
-        for &op in chunk {
-            // SAFETY:
-            // 同一Stageでは各要素が高々1個のComparatorにのみ属する。
-            // よって、異なるComparator間のread/write先は重複しない。
-            // また、par_chunksのfor_eachは全chunkの完了を待つため、
-            // 次Stageが開始する時点でこのStageのアクセスはすべて終了している。
-            unsafe { buffer.execute(op) };
-        }
-    });
-}
-
-fn bitonic_sorter_par(mut input: Bitonic) -> Bitonic {
-    let mut block_size = input.0.len();
-
-    while block_size >= 2 {
-        execute_stage(&mut input.0, block_size);
-
-        block_size /= 2;
-    }
-
-    input
-}
-
 fn half_cleaner_slice(input: &mut [bool]) {
     let half_length = input.len() / 2;
     let (left, right) = input.split_at_mut(half_length);
 
     for (x, y) in left.iter_mut().zip(right.iter_mut()) {
-        (*x, *y) = comparator(*x, *y);
+        comparator_mut(x, y);
     }
+}
+
+fn comparator_mut(x: &mut bool, y: &mut bool) {
+    (*x, *y) = (*x || *y, *x && *y);
 }
 
 fn bitonic_sorter_single(mut input: Bitonic) -> Bitonic {
     let mut block_size = input.0.len();
 
+    println!("block_size: {}", block_size);
     while block_size >= 2 {
         input
             .0
@@ -304,13 +203,14 @@ fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
     println!("num threads: {}", num_threads);
 
     let par_chunk_size = comparator_count.div_ceil(num_threads);
+    println!("par_chunk_size: {}", par_chunk_size);
 
     // Rayon の closure に *mut bool を直接 capture させないため、
     // アドレス値として保持する。
     let ptr = input.0.as_mut_ptr() as usize;
 
     while block_size >= 2 {
-        let start = std::time::Instant::now();
+        // let start = std::time::Instant::now();
 
         let half = block_size / 2;
 
@@ -350,8 +250,8 @@ fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
         });
 
         block_size /= 2;
-        let time = start.elapsed();
-        println!("time: {time:?}");
+        // let time = start.elapsed();
+        // println!("time: {time:?}");
     }
 
     input
