@@ -298,11 +298,12 @@ fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
 
     let mut block_size = len;
 
-    let par_chunk_size = (block_size / 4).max(COMPARATOR_CHUNK_SIZE).max(1);
-
     let comparator_count = len / 2;
-
     println!("comparator count: {}", comparator_count);
+    let num_threads = rayon::current_num_threads();
+    println!("num threads: {}", num_threads);
+
+    let par_chunk_size = comparator_count.div_ceil(num_threads);
 
     // Rayon の closure に *mut bool を直接 capture させないため、
     // アドレス値として保持する。
