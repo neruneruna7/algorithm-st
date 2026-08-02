@@ -5,13 +5,16 @@ use rayon::prelude::*;
 const COMPARATOR_CHUNK_SIZE: usize = 1024;
 
 fn main() {
-    let input = generate_bitonic(1048576);
+    // let input = generate_bitonic(1048576);
+    let input = generate_bitonic(33554432);
+    let input = generate_bitonic(1073741824);
 
-    let start = std::time::Instant::now();
-    let bitonic_out = bitonic_sorter_par(Bitonic::new(input.clone()).unwrap());
-    let bitonic_time = start.elapsed();
-    assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
-    println!("bitonic par time: {bitonic_time:?}");
+    rayon::ThreadPoolBuilder::new().build_global().unwrap();
+    // let start = std::time::Instant::now();
+    // let bitonic_out = bitonic_sorter_par(Bitonic::new(input.clone()).unwrap());
+    // let bitonic_time = start.elapsed();
+    // assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
+    // println!("bitonic par time: {bitonic_time:?}");
 
     let start = std::time::Instant::now();
     let bitonic_out = bitonic_sorter(Bitonic::new(input.clone()).unwrap());
@@ -289,45 +292,69 @@ fn bitonic_sorter_single(mut input: Bitonic) -> Bitonic {
 }
 
 fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
-    let mut block_size = input.0.len();
-    let par_chunk_size = block_size / 4;
-    let par_chunk_size = std::cmp::max(par_chunk_size, COMPARATOR_CHUNK_SIZE);
+    let len = input.0.len();
+
+    debug_assert!(len.is_power_of_two());
+
+    let mut block_size = len;
+
+    let par_chunk_size = (block_size / 4).max(COMPARATOR_CHUNK_SIZE).max(1);
+
+    let comparator_count = len / 2;
+
+    println!("comparator count: {}", comparator_count);
+
+    // Rayon の closure に *mut bool を直接 capture させないため、
+    // アドレス値として保持する。
+    let ptr = input.0.as_mut_ptr() as usize;
 
     while block_size >= 2 {
-        let mut comparators = input
-            .0
-            // 1段進むごとに，前段の2倍の個数で分割
-            .chunks_mut(block_size)
-            // それぞれを半分で分割し，コンパレータの処理単位で分ける
-            .map(|input| {
-                let half_length = input.len() / 2;
-                let (left, right) = input.split_at_mut(half_length);
-                left.iter_mut().zip(right.iter_mut())
-            })
-            // フラットにして扱いやすく
-            .flatten()
-            .collect::<Vec<_>>();
+        let start = std::time::Instant::now();
 
-        comparators
-            .par_chunks_mut(par_chunk_size)
-            .for_each(|chunk| {
-                for (x, y) in chunk {
-                    (**x, **y) = {
-                        let x = **x;
-                        let y = **y;
-                        let max = x || y;
-                        let min = x && y;
-                        (max, min)
-                    };
+        let half = block_size / 2;
+
+        let chunk_count = comparator_count.div_ceil(par_chunk_size);
+
+        (0..chunk_count).into_par_iter().for_each(|chunk_index| {
+            let ptr = ptr as *mut bool;
+
+            let begin = chunk_index * par_chunk_size;
+            let end = (begin + par_chunk_size).min(comparator_count);
+
+            for comparator_index in begin..end {
+                // comparator_index は、元コードで
+                //
+                // chunks_mut(block_size)
+                //   .flat_map(|block| left.zip(right))
+                //
+                // した後の通し番号に相当する。
+                let block_index = comparator_index / half;
+                let offset = comparator_index % half;
+
+                let x_index = block_index * block_size + offset;
+
+                let y_index = x_index + half;
+
+                unsafe {
+                    let x_ptr = ptr.add(x_index);
+                    let y_ptr = ptr.add(y_index);
+
+                    let x = *x_ptr;
+                    let y = *y_ptr;
+
+                    *x_ptr = x || y;
+                    *y_ptr = x && y;
                 }
-            });
+            }
+        });
 
         block_size /= 2;
+        let time = start.elapsed();
+        println!("time: {time:?}");
     }
 
     input
 }
-
 // input.0.par_chunks_mut(block_size).for_each(|input| {
 //     let half_length = input.len() / 2;
 //     let (left, right) = input.split_at_mut(half_length);
