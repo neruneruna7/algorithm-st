@@ -1,18 +1,29 @@
 use std::fmt::Display;
 
-use rayon::iter::{
-    IndexedParallelIterator as _, IntoParallelIterator, IntoParallelRefIterator as _,
-    ParallelIterator as _,
-};
+use rayon::prelude::*;
+
+const COMPARATOR_CHUNK_SIZE: usize = 1024;
 
 fn main() {
     let input = generate_bitonic(1048576);
+
+    let start = std::time::Instant::now();
+    let bitonic_out = bitonic_sorter_par(Bitonic::new(input.clone()).unwrap());
+    let bitonic_time = start.elapsed();
+    assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
+    println!("bitonic par time: {bitonic_time:?}");
 
     let start = std::time::Instant::now();
     let bitonic_out = bitonic_sorter(Bitonic::new(input.clone()).unwrap());
     let bitonic_time = start.elapsed();
     assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
     println!("bitonic time: {bitonic_time:?}");
+
+    let start = std::time::Instant::now();
+    let bitonic_out = bitonic_sorter_single(Bitonic::new(input.clone()).unwrap());
+    let bitonic_time = start.elapsed();
+    assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
+    println!("bitonic single time: {bitonic_time:?}");
 
     // 通常ソート
     let start = std::time::Instant::now();
@@ -147,37 +158,186 @@ fn half_cleaner(input: Bitonic) -> Bitonic {
     Bitonic(bitonic_out)
 }
 
-use rayon::prelude::*;
+#[derive(Debug, Clone, Copy)]
+struct ComparatorOp {
+    left: usize,
+    right: usize,
+}
 
-fn half_cleaner_slice(input: &mut [bool]) {
-    let half_length = input.len() / 2;
-    let (left, right) = input.split_at_mut(half_length);
+fn stage_comparators(len: usize, block_size: usize) -> impl Iterator<Item = ComparatorOp> {
+    debug_assert!(block_size >= 2);
+    debug_assert!(block_size.is_power_of_two());
+    debug_assert!(len.is_multiple_of(block_size));
 
-    for (x, y) in left.iter_mut().zip(right.iter_mut()) {
-        println!("count");
-        (*x, *y) = comparator(*x, *y);
+    let half = block_size / 2;
+
+    (0..len).step_by(block_size).flat_map(move |block_start| {
+        (0..half).map(move |offset| ComparatorOp {
+            left: block_start + offset,
+            right: block_start + half + offset,
+        })
+    })
+}
+
+#[derive(Clone, Copy)]
+struct StageBuffer {
+    ptr: std::ptr::NonNull<bool>,
+    len: usize,
+}
+
+// StageBufferはsafeな可変アクセスAPIを持たない。
+// 同一Stage内でComparatorのアクセス先が重複しないことを呼び出し側が保証する。
+unsafe impl Sync for StageBuffer {}
+
+impl StageBuffer {
+    fn new(slice: &mut [bool]) -> Self {
+        Self {
+            ptr: std::ptr::NonNull::new(slice.as_mut_ptr()).expect("slice pointer is non-null"),
+            len: slice.len(),
+        }
+    }
+
+    unsafe fn execute(&self, op: ComparatorOp) {
+        debug_assert!(op.left < self.len);
+        debug_assert!(op.right < self.len);
+        debug_assert_ne!(op.left, op.right);
+
+        let ptr = self.ptr.as_ptr();
+        let (x, y) = unsafe { (*ptr.add(op.left), *ptr.add(op.right)) };
+        let (x, y) = comparator(x, y);
+
+        unsafe {
+            *ptr.add(op.left) = x;
+            *ptr.add(op.right) = y;
+        }
     }
 }
 
-fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
+#[cfg(debug_assertions)]
+fn validate_stage(len: usize, operations: &[ComparatorOp]) {
+    let mut used = vec![false; len];
+
+    for op in operations {
+        assert!(op.left < len);
+        assert!(op.right < len);
+        assert_ne!(op.left, op.right);
+        assert!(!used[op.left]);
+        assert!(!used[op.right]);
+
+        used[op.left] = true;
+        used[op.right] = true;
+    }
+}
+
+fn execute_stage(input: &mut [bool], block_size: usize) {
+    let operations: Vec<_> = stage_comparators(input.len(), block_size).collect();
+
+    let op_length = operations.len();
+    let chunk_size = op_length / 4;
+    let chunk_size = std::cmp::max(chunk_size, COMPARATOR_CHUNK_SIZE);
+    #[cfg(debug_assertions)]
+    validate_stage(input.len(), &operations);
+
+    let buffer = StageBuffer::new(input);
+
+    operations.par_chunks(chunk_size).for_each(|chunk| {
+        for &op in chunk {
+            // SAFETY:
+            // 同一Stageでは各要素が高々1個のComparatorにのみ属する。
+            // よって、異なるComparator間のread/write先は重複しない。
+            // また、par_chunksのfor_eachは全chunkの完了を待つため、
+            // 次Stageが開始する時点でこのStageのアクセスはすべて終了している。
+            unsafe { buffer.execute(op) };
+        }
+    });
+}
+
+fn bitonic_sorter_par(mut input: Bitonic) -> Bitonic {
     let mut block_size = input.0.len();
 
     while block_size >= 2 {
-        input.0.par_chunks_mut(block_size).for_each(|block| {
-            let half = block.len() / 2;
-            let (left, right) = block.split_at_mut(half);
-
-            for (x, y) in left.iter_mut().zip(right.iter_mut()) {
-                (*x, *y) = comparator(*x, *y);
-            }
-        });
+        execute_stage(&mut input.0, block_size);
 
         block_size /= 2;
     }
 
     input
 }
-// fn bitonic_sorter(input: Bitonic) -> Bitonic {
+
+fn half_cleaner_slice(input: &mut [bool]) {
+    let half_length = input.len() / 2;
+    let (left, right) = input.split_at_mut(half_length);
+
+    for (x, y) in left.iter_mut().zip(right.iter_mut()) {
+        (*x, *y) = comparator(*x, *y);
+    }
+}
+
+fn bitonic_sorter_single(mut input: Bitonic) -> Bitonic {
+    let mut block_size = input.0.len();
+
+    while block_size >= 2 {
+        input
+            .0
+            .par_chunks_mut(block_size)
+            .for_each(half_cleaner_slice);
+
+        block_size /= 2;
+    }
+
+    input
+}
+
+fn bitonic_sorter(mut input: Bitonic) -> Bitonic {
+    let mut block_size = input.0.len();
+    let par_chunk_size = block_size / 4;
+    let par_chunk_size = std::cmp::max(par_chunk_size, COMPARATOR_CHUNK_SIZE);
+
+    while block_size >= 2 {
+        let mut comparators = input
+            .0
+            // 1段進むごとに，前段の2倍の個数で分割
+            .chunks_mut(block_size)
+            // それぞれを半分で分割し，コンパレータの処理単位で分ける
+            .map(|input| {
+                let half_length = input.len() / 2;
+                let (left, right) = input.split_at_mut(half_length);
+                left.iter_mut().zip(right.iter_mut())
+            })
+            // フラットにして扱いやすく
+            .flatten()
+            .collect::<Vec<_>>();
+
+        comparators
+            .par_chunks_mut(par_chunk_size)
+            .for_each(|chunk| {
+                for (x, y) in chunk {
+                    (**x, **y) = {
+                        let x = **x;
+                        let y = **y;
+                        let max = x || y;
+                        let min = x && y;
+                        (max, min)
+                    };
+                }
+            });
+
+        block_size /= 2;
+    }
+
+    input
+}
+
+// input.0.par_chunks_mut(block_size).for_each(|input| {
+//     let half_length = input.len() / 2;
+//     let (left, right) = input.split_at_mut(half_length);
+
+//     for (x, y) in left.iter_mut().zip(right.iter_mut()) {
+//         (*x, *y) = comparator(*x, *y);
+//     }
+// });
+
+// fn bitonic_sorter_single(input: Bitonic) -> Bitonic {
 //     // println!("process: {}", input);
 //     let half_length = input.0.len() / 2;
 //     if half_length < 1 {
@@ -232,5 +392,17 @@ mod test {
         let mut merge_out = input;
         merge_sort(&mut merge_out);
         assert_eq!(merge_out, expected);
+    }
+
+    #[test]
+    fn test_bitonic_sorter() {
+        for exponent in 0..=10 {
+            let input = generate_bitonic(1 << exponent);
+            let true_count = input.iter().filter(|&&value| value).count();
+            let output = bitonic_sorter_par(Bitonic::new(input).unwrap()).0;
+
+            assert!(output.is_sorted_by(|a, b| a >= b));
+            assert_eq!(output.iter().filter(|&&value| value).count(), true_count);
+        }
     }
 }
