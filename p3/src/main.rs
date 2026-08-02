@@ -6,23 +6,35 @@ use rayon::iter::{
 };
 
 fn main() {
-    let input_bitonic = Bitonic::new(generate_bitonic(4096)).unwrap();
+    let input = generate_bitonic(1048576);
 
     let start = std::time::Instant::now();
-    let bitonic_out = bitonic_sorter(input_bitonic);
-    let end = std::time::Instant::now();
-    // ソートされているか確認
+    let bitonic_out = bitonic_sorter(Bitonic::new(input.clone()).unwrap());
+    let bitonic_time = start.elapsed();
     assert!(bitonic_out.0.is_sorted_by(|a, b| a >= b));
-
-    println!("bitonic time: {:?}", (end - start));
+    println!("bitonic time: {bitonic_time:?}");
 
     // 通常ソート
-    let start_normal = std::time::Instant::now();
-    let mut normal_out = bitonic_out.0.clone().into_iter().collect::<Vec<_>>();
-    normal_out.sort();
-    let end_normal = std::time::Instant::now();
+    let start = std::time::Instant::now();
+    let mut normal_out = input.clone();
+    normal_out.sort_by(|a, b| b.cmp(a));
+    let normal_time = start.elapsed();
+    assert!(normal_out.is_sorted_by(|a, b| a >= b));
+    println!("normal time: {normal_time:?}");
 
-    println!("normal time: {:?}", (end_normal - start_normal));
+    let start = std::time::Instant::now();
+    let mut insertion_out = input.clone();
+    insertion_sort(&mut insertion_out);
+    let insertion_time = start.elapsed();
+    assert!(insertion_out.is_sorted_by(|a, b| a >= b));
+    println!("insertion sort time: {insertion_time:?}");
+
+    let start = std::time::Instant::now();
+    let mut merge_out = input.clone();
+    merge_sort(&mut merge_out);
+    let merge_time = start.elapsed();
+    assert!(merge_out.is_sorted_by(|a, b| a >= b));
+    println!("merge sort time: {merge_time:?}");
 }
 
 fn generate_bitonic(len: usize) -> Vec<bool> {
@@ -52,6 +64,49 @@ fn sorting_network_4(input: (bool, bool, bool, bool)) -> (bool, bool, bool, bool
     let (step3_1, step3_4) = (step2_1, step2_4);
 
     (step3_1, step3_2, step3_3, step3_4)
+}
+
+/// `true` が先に来る降順で挿入ソートする．
+fn insertion_sort(input: &mut [bool]) {
+    for index in 1..input.len() {
+        let value = input[index];
+        let mut position = index;
+
+        while position > 0 && input[position - 1] < value {
+            input[position] = input[position - 1];
+            position -= 1;
+        }
+
+        input[position] = value;
+    }
+}
+
+/// `true` が先に来る降順でマージソートする．
+fn merge_sort(input: &mut [bool]) {
+    if input.len() <= 1 {
+        return;
+    }
+
+    let middle = input.len() / 2;
+    merge_sort(&mut input[..middle]);
+    merge_sort(&mut input[middle..]);
+
+    let mut merged = Vec::with_capacity(input.len());
+    let (mut left, mut right) = (0, middle);
+
+    while left < middle && right < input.len() {
+        if input[left] >= input[right] {
+            merged.push(input[left]);
+            left += 1;
+        } else {
+            merged.push(input[right]);
+            right += 1;
+        }
+    }
+
+    merged.extend_from_slice(&input[left..middle]);
+    merged.extend_from_slice(&input[right..]);
+    input.copy_from_slice(&merged);
 }
 
 #[derive(Debug, Clone)]
@@ -131,5 +186,19 @@ mod test {
             half_cleaner_output.0,
             vec![true, true, false, true, false, false, false, false]
         );
+    }
+
+    #[test]
+    fn test_insertion_and_merge_sort() {
+        let input = vec![false, true, false, true, true, false, true];
+        let expected = vec![true, true, true, true, false, false, false];
+
+        let mut insertion_out = input.clone();
+        insertion_sort(&mut insertion_out);
+        assert_eq!(insertion_out, expected);
+
+        let mut merge_out = input;
+        merge_sort(&mut merge_out);
+        assert_eq!(merge_out, expected);
     }
 }
